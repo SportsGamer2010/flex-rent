@@ -1,4 +1,4 @@
-const TOKEN_KEY = "flex_demo_token";
+const TOKEN_KEY = "unleashed_demo_token";
 
 export type UserRole = "tenant" | "landlord" | "admin";
 
@@ -42,6 +42,28 @@ export const api = {
     return request<{ token: string; user: User }>("/api/auth/demo-login", {
       method: "POST",
       body: JSON.stringify({ role, email }),
+    });
+  },
+  listLandlords() {
+    return request<{ landlords: Array<{ id: string; name: string }> }>("/api/public/landlords");
+  },
+  registerLandlord(name: string, email: string) {
+    return request<{ token: string; user: User }>("/api/auth/register-landlord", {
+      method: "POST",
+      body: JSON.stringify({ name, email }),
+    });
+  },
+  registerTenant(input: {
+    name: string;
+    email: string;
+    landlordId: string;
+    unit: string;
+    monthlyRent: number;
+    secondPaymentDay?: number;
+  }) {
+    return request<{ token: string; user: User }>("/api/auth/register-tenant", {
+      method: "POST",
+      body: JSON.stringify(input),
     });
   },
   logout() {

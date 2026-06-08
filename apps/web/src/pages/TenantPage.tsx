@@ -80,7 +80,7 @@ export default function TenantPage() {
         <StatCard
           label="Landlord status"
           value={summary.landlordPaidOnDueDate ? "Paid in full" : "Awaiting 1st payment"}
-          hint="Flex pays landlord when you pay installment 1"
+          hint="The Unleashed pays landlord when you pay installment 1"
         />
         <StatCard label="Monthly fees" value={money(fees.total)} hint="Membership + 1% bill fee" />
       </div>
@@ -155,7 +155,7 @@ export default function TenantPage() {
             done={firstPaid}
             step="1"
             title="Pay 1st installment"
-            text="Flex uses this to pay your landlord in full on the due date."
+            text="The Unleashed uses this to pay your landlord in full on the due date."
           />
           <Step
             done={summary.landlordPaidOnDueDate}
@@ -167,7 +167,7 @@ export default function TenantPage() {
             done={payments.every((p) => p.status === "paid")}
             step="3"
             title="Pay 2nd installment"
-            text={`Repay Flex by the ${tenant.secondPaymentDay ?? secondDay}th from bank ••••${tenant.bankLast4}.`}
+            text={`Repay The Unleashed by the ${tenant.secondPaymentDay ?? secondDay}th from bank ••••${tenant.bankLast4}.`}
           />
         </div>
       </Card>

@@ -1,6 +1,7 @@
 import { LogOut, Sparkles } from "lucide-react";
 import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { APP_NAME } from "../lib/brand";
 
 const navByRole = {
   tenant: [{ to: "/app", label: "Dashboard" }],
@@ -22,7 +23,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600">
               <Sparkles className="h-5 w-5" />
             </span>
-            Flex Rent
+            {APP_NAME}
           </Link>
           <nav className="hidden items-center gap-1 sm:flex">
             {nav.map((item) => (

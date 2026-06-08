@@ -25,7 +25,7 @@ export default function LandlordPage() {
       <div>
         <h1 className="text-3xl font-bold text-white">{landlord.name}</h1>
         <p className="mt-1 text-slate-400">
-          Payout account ••••{landlord.payoutAccountLast4} · Flex pays you in full on rent due dates
+          Payout account ••••{landlord.payoutAccountLast4} · The Unleashed pays you in full on rent due dates
         </p>
       </div>
 
@@ -36,7 +36,7 @@ export default function LandlordPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card title="Tenants using Flex" subtitle="Residents who split rent through the platform">
+        <Card title="Enrolled tenants" subtitle="Residents who split rent through the platform">
           <div className="space-y-3">
             {tenants.map((tenant) => (
               <div
@@ -82,7 +82,7 @@ export default function LandlordPage() {
         </Card>
       </div>
 
-      <Card title="Why property managers use Flex">
+      <Card title="Why property managers use The Unleashed">
         <ul className="grid gap-3 text-sm text-slate-400 sm:grid-cols-3">
           <li className="rounded-xl border border-white/10 p-4">
             <span className="font-medium text-white">Predictable cash flow</span>

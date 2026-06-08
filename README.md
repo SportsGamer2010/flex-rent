@@ -1,6 +1,6 @@
-# Flex Rent — Demo App
+# The Unleashed — Demo App
 
-A Flex-style rent splitting demo for local testing and client presentations. No external API keys required.
+A flexible rent splitting demo for local testing and remote presentations. No external API keys required.
 
 ## Quick start (local)
 
@@ -82,7 +82,9 @@ On the login screen, pick a role to sign in instantly (no password):
 |------|-------|-------------------|
 | **Tenant** | jane@demo.com | Split rent into 2 payments, pay installments, view schedule |
 | **Landlord** | owner@sunset.com | See guaranteed on-time payouts and enrolled tenants |
-| **Admin** | admin@flex.local | Platform overview, users, and payment activity |
+| **Admin** | admin@theunleashed.app | Platform overview, users, and payment activity |
+
+You can also **create your own tenant or landlord account** on the login page — useful for remote testing on Railway. Create a landlord first, then a tenant linked to that property.
 
 Data persists in `apps/api/data/store.json` (or `DATA_DIR` on Railway) between restarts.
 

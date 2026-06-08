@@ -13,6 +13,15 @@ interface AuthContextValue {
   user: User | null;
   loading: boolean;
   login: (role: UserRole, email?: string) => Promise<void>;
+  registerLandlord: (name: string, email: string) => Promise<void>;
+  registerTenant: (input: {
+    name: string;
+    email: string;
+    landlordId: string;
+    unit: string;
+    monthlyRent: number;
+    secondPaymentDay?: number;
+  }) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -35,11 +44,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = useCallback(async (role: UserRole, email?: string) => {
-    const { token, user } = await api.demoLogin(role, email);
+  const applySession = useCallback(({ token, user }: { token: string; user: User }) => {
     setToken(token);
     setUser(user);
   }, []);
+
+  const login = useCallback(
+    async (role: UserRole, email?: string) => {
+      applySession(await api.demoLogin(role, email));
+    },
+    [applySession],
+  );
+
+  const registerLandlord = useCallback(
+    async (name: string, email: string) => {
+      applySession(await api.registerLandlord(name, email));
+    },
+    [applySession],
+  );
+
+  const registerTenant = useCallback(
+    async (input: {
+      name: string;
+      email: string;
+      landlordId: string;
+      unit: string;
+      monthlyRent: number;
+      secondPaymentDay?: number;
+    }) => {
+      applySession(await api.registerTenant(input));
+    },
+    [applySession],
+  );
 
   const logout = useCallback(async () => {
     try {
@@ -51,8 +87,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, login, logout }),
-    [user, loading, login, logout],
+    () => ({ user, loading, login, registerLandlord, registerTenant, logout }),
+    [user, loading, login, registerLandlord, registerTenant, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

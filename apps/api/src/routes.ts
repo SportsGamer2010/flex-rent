@@ -2,10 +2,13 @@ import { Router } from "express";
 import { v4 as uuid } from "uuid";
 import {
   addActivity,
+  createLandlordAccount,
+  createTenantAccount,
   findLandlord,
   findTenant,
   findUserByEmail,
   getStore,
+  listLandlordsPublic,
   persist,
   resetStore,
 } from "./store.js";
@@ -46,7 +49,57 @@ function tenantFees(tenant: { monthlyRent: number; membershipFee: number; billFe
 }
 
 router.get("/health", (_req, res) => {
-  res.json({ ok: true, service: "flex-rent-api", mode: "demo" });
+  res.json({ ok: true, service: "the-unleashed-api", mode: "demo" });
+});
+
+router.get("/public/landlords", (_req, res) => {
+  res.json({ landlords: listLandlordsPublic() });
+});
+
+router.post("/auth/register-landlord", (req, res) => {
+  const { name, email } = req.body as { name?: string; email?: string };
+  try {
+    const { user } = createLandlordAccount({ name: name ?? "", email: email ?? "" });
+    const token = uuid();
+    const store = getStore();
+    store.sessions[token] = user.id;
+    persist();
+    res.json({ token, user });
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "Registration failed" });
+  }
+});
+
+router.post("/auth/register-tenant", (req, res) => {
+  const { name, email, landlordId, unit, monthlyRent, secondPaymentDay } = req.body as {
+    name?: string;
+    email?: string;
+    landlordId?: string;
+    unit?: string;
+    monthlyRent?: number;
+    secondPaymentDay?: number;
+  };
+  if (!landlordId) {
+    res.status(400).json({ error: "Landlord is required" });
+    return;
+  }
+  try {
+    const { user } = createTenantAccount({
+      name: name ?? "",
+      email: email ?? "",
+      landlordId,
+      unit: unit ?? "",
+      monthlyRent: Number(monthlyRent),
+      secondPaymentDay: secondPaymentDay ? Number(secondPaymentDay) : undefined,
+    });
+    const token = uuid();
+    const store = getStore();
+    store.sessions[token] = user.id;
+    persist();
+    res.json({ token, user });
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "Registration failed" });
+  }
 });
 
 router.post("/auth/demo-login", (req, res) => {
@@ -196,7 +249,7 @@ router.post("/tenant/payments/:id/pay", (req, res) => {
       );
       if (payout) payout.status = "completed";
       addActivity(
-        `Flex paid ${tenant.landlordId ? findLandlord(tenant.landlordId)?.name : "landlord"} $${tenant.monthlyRent} in full for ${tenant.name}.`,
+        `The Unleashed paid ${tenant.landlordId ? findLandlord(tenant.landlordId)?.name : "landlord"} $${tenant.monthlyRent} in full for ${tenant.name}.`,
         "tenant",
       );
     }

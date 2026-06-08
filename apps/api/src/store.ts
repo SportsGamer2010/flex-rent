@@ -54,7 +54,7 @@ function seedStore(): Store {
   const users: User[] = [
     { id: uuid(), email: "jane@demo.com", name: "Jane Doe", role: "tenant", tenantId },
     { id: uuid(), email: "owner@sunset.com", name: "Sunset Apartments", role: "landlord", landlordId },
-    { id: uuid(), email: "admin@flex.local", name: "Flex Admin", role: "admin" },
+    { id: uuid(), email: "admin@theunleashed.app", name: "The Unleashed Admin", role: "admin" },
   ];
 
   const payments: Payment[] = [
@@ -97,7 +97,7 @@ function seedStore(): Store {
     {
       id: uuid(),
       at: new Date().toISOString(),
-      message: "Jane Doe enrolled in Flexible Rent for unit 4B.",
+      message: "Jane Doe enrolled with The Unleashed for unit 4B.",
       role: "tenant",
     },
     {
@@ -157,4 +157,131 @@ export function findTenant(id: string) {
 
 export function findLandlord(id: string) {
   return store.landlords.find((l) => l.id === id);
+}
+
+function randomLast4() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+export function listLandlordsPublic() {
+  return store.landlords.map((l) => ({ id: l.id, name: l.name }));
+}
+
+export function createLandlordAccount(input: { name: string; email: string }) {
+  const email = input.email.trim().toLowerCase();
+  const name = input.name.trim();
+  if (!name || !email) throw new Error("Name and email are required");
+  if (findUserByEmail(email)) throw new Error("Email already in use");
+
+  const landlordId = uuid();
+  const landlord: Landlord = {
+    id: landlordId,
+    name,
+    email,
+    payoutAccountLast4: randomLast4(),
+  };
+  const user: User = {
+    id: uuid(),
+    email,
+    name,
+    role: "landlord",
+    landlordId,
+  };
+
+  store.landlords.push(landlord);
+  store.users.push(user);
+  addActivity(`${name} created a landlord account.`, "landlord");
+  return { landlord, user };
+}
+
+export function createTenantAccount(input: {
+  name: string;
+  email: string;
+  landlordId: string;
+  unit: string;
+  monthlyRent: number;
+  secondPaymentDay?: number;
+}) {
+  const email = input.email.trim().toLowerCase();
+  const name = input.name.trim();
+  const unit = input.unit.trim();
+  if (!name || !email || !unit) throw new Error("Name, email, and unit are required");
+  if (findUserByEmail(email)) throw new Error("Email already in use");
+  if (!findLandlord(input.landlordId)) throw new Error("Landlord not found");
+  if (!input.monthlyRent || input.monthlyRent < 100) {
+    throw new Error("Monthly rent must be at least $100");
+  }
+
+  const rent = input.monthlyRent;
+  const secondDay = input.secondPaymentDay ?? 15;
+  const dueDay = 1;
+  const firstAmount = Math.round((rent / 2) * 100) / 100;
+  const secondAmount = Math.round((rent - firstAmount) * 100) / 100;
+  const { year, month } = currentMonthYear();
+  const tenantId = uuid();
+
+  const tenant: Tenant = {
+    id: tenantId,
+    name,
+    email,
+    landlordId: input.landlordId,
+    unit,
+    monthlyRent: rent,
+    rentDueDay: dueDay,
+    bankLast4: randomLast4(),
+    membershipFee: 14.99,
+    billFeePercent: 1,
+    secondPaymentDay: secondDay,
+    creditLimit: Math.max(2500, rent * 2),
+    enrolled: true,
+  };
+
+  const user: User = {
+    id: uuid(),
+    email,
+    name,
+    role: "tenant",
+    tenantId,
+  };
+
+  const payments: Payment[] = [
+    {
+      id: uuid(),
+      tenantId,
+      label: "1st rent installment",
+      amount: firstAmount,
+      dueDate: formatDate(year, month, dueDay),
+      status: "scheduled",
+      paidAt: null,
+      installment: 1,
+    },
+    {
+      id: uuid(),
+      tenantId,
+      label: "2nd rent installment",
+      amount: secondAmount,
+      dueDate: formatDate(year, month, secondDay),
+      status: "scheduled",
+      paidAt: null,
+      installment: 2,
+    },
+  ];
+
+  const payout: LandlordPayout = {
+    id: uuid(),
+    landlordId: input.landlordId,
+    tenantId,
+    tenantName: name,
+    unit,
+    amount: rent,
+    paidOn: formatDate(year, month, dueDay),
+    status: "pending",
+  };
+
+  store.tenants.push(tenant);
+  store.users.push(user);
+  store.payments.push(...payments);
+  store.payouts.push(payout);
+  addActivity(`${name} created a tenant account for unit ${unit}.`, "tenant");
+  return { tenant, user };
 }

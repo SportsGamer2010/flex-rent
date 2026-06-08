@@ -1,5 +1,6 @@
 import { ArrowRight, Building2, Calendar, ShieldCheck, Sparkles, Wallet } from "lucide-react";
 import { Link } from "react-router-dom";
+import { APP_NAME } from "../lib/brand";
 
 const features = [
   {
@@ -10,7 +11,7 @@ const features = [
   {
     icon: Building2,
     title: "Landlord paid on time",
-    text: "Your property gets the full rent on the due date — you repay Flex in installments.",
+    text: "Your property gets the full rent on the due date — you repay The Unleashed in installments.",
   },
   {
     icon: ShieldCheck,
@@ -32,7 +33,7 @@ export default function HomePage() {
         <div className="relative mx-auto max-w-5xl text-center">
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-sm text-slate-300">
             <Sparkles className="h-4 w-4 text-accent-400" />
-            Local demo — no API keys required
+            {APP_NAME} — no API keys required
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-white sm:text-6xl">
             Split rent into
@@ -41,15 +42,15 @@ export default function HomePage() {
             </span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-400">
-            A Flex-style experience for tenants and landlords. Run it locally to test flows and
-            walk clients through flexible rent collection.
+            A flexible rent experience for tenants and landlords. Create your own account or use
+            the demo profiles to test split payments remotely.
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
             <Link
               to="/login"
               className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-6 py-3 font-medium text-white transition hover:bg-brand-700"
             >
-              Open demo
+              Get started
               <ArrowRight className="h-4 w-4" />
             </Link>
             <a
@@ -82,16 +83,16 @@ export default function HomePage() {
           <h2 className="text-2xl font-semibold text-white">How the demo works</h2>
           <ol className="mt-8 space-y-4 text-left text-slate-400">
             <li className="rounded-xl border border-white/10 bg-slate-950/50 p-4">
-              <span className="font-medium text-white">1. Sign in as a tenant</span> — view your
-              split schedule and make a mock payment.
+              <span className="font-medium text-white">1. Create or sign in as a tenant</span> —
+              view your split schedule and make a mock payment.
             </li>
             <li className="rounded-xl border border-white/10 bg-slate-950/50 p-4">
-              <span className="font-medium text-white">2. Switch to landlord</span> — see
-              guaranteed full rent payout on the due date.
+              <span className="font-medium text-white">2. Create or sign in as a landlord</span> —
+              see guaranteed full rent payout on the due date.
             </li>
             <li className="rounded-xl border border-white/10 bg-slate-950/50 p-4">
               <span className="font-medium text-white">3. Open admin</span> — platform stats and
-              activity feed for stakeholder demos.
+              activity feed.
             </li>
           </ol>
         </div>
