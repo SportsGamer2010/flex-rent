@@ -66,6 +66,14 @@ By default, demo data lives on the container filesystem and resets on redeploy. 
 
 Railway uses `/api/health` as the health check endpoint.
 
+### Build troubleshooting
+
+If Railway still runs `npm ci && npm run build` or the build fails:
+
+1. **Service → Settings → Build** — clear any custom build command override (leave blank so `railway.toml` applies).
+2. Redeploy from the latest `main` commit after pushing.
+3. The repo uses a single root `package-lock.json` (npm workspaces). Nested lockfiles under `apps/` were removed on purpose.
+
 ## Demo accounts
 
 On the login screen, pick a role to sign in instantly (no password):
