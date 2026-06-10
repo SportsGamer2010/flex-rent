@@ -173,21 +173,9 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Stats strip */}
-      <section className="border-y border-brand-600/15 bg-surface-800/50 px-4 py-12">
-        <div className="mx-auto grid max-w-5xl gap-8 sm:grid-cols-3">
-          {[
-            { value: `$${LANDLORD_FEE_PER_PAYMENT}`, label: "Per payment — landlord pricing" },
-            { value: "100%", label: "Rent to landlords on due date" },
-            { value: "Free", label: "Landlord account signup" },
-          ].map((stat) => (
-            <div key={stat.label} className="text-center">
-              <p className="text-3xl font-bold text-brand-400">{stat.value}</p>
-              <p className="mt-1 text-sm text-neutral-400">{stat.label}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+      <div className="mx-auto max-w-6xl px-4">
+        <div className="h-px bg-gradient-to-r from-transparent via-brand-500/50 to-transparent" />
+      </div>
 
       {/* Features */}
       <section className="px-4 py-20">
