@@ -2,11 +2,24 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { v4 as uuid } from "uuid";
-import type { Activity, Landlord, LandlordPayout, Payment, Store, Tenant, User } from "./types.js";
+import { mockCreditScore, riskTierToSplitCount, scoreToRiskTier } from "./risk.js";
+import type {
+  Activity,
+  CreditCheck,
+  Landlord,
+  LandlordPayout,
+  Payment,
+  RentalHistoryEntry,
+  Store,
+  Tenant,
+  User,
+  UtilityBill,
+} from "./types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR ?? path.join(__dirname, "..", "data");
 const DATA_FILE = path.join(DATA_DIR, "store.json");
+export const UPLOADS_DIR = process.env.UPLOADS_DIR ?? path.join(__dirname, "..", "uploads");
 
 function currentMonthYear() {
   const now = new Date();
@@ -14,19 +27,48 @@ function currentMonthYear() {
 }
 
 function formatDate(year: number, month: number, day: number) {
-  const d = new Date(year, month, day);
-  return d.toISOString().slice(0, 10);
+  return new Date(year, month, day).toISOString().slice(0, 10);
+}
+
+const SPLIT_DAYS: Record<2 | 4, number[]> = {
+  2: [1, 15],
+  4: [1, 8, 15, 22],
+};
+
+export function generatePaymentsForTenant(tenant: Tenant): Payment[] {
+  const { year, month } = currentMonthYear();
+  const days = SPLIT_DAYS[tenant.splitCount];
+  const baseAmount = Math.floor((tenant.monthlyRent / tenant.splitCount) * 100) / 100;
+  let remainder = Math.round((tenant.monthlyRent - baseAmount * tenant.splitCount) * 100) / 100;
+
+  return days.map((day, index) => {
+    const installment = (index + 1) as Payment["installment"];
+    let amount = baseAmount;
+    if (remainder > 0) {
+      amount = Math.round((amount + 0.01) * 100) / 100;
+      remainder = Math.round((remainder - 0.01) * 100) / 100;
+    }
+    const ordinals = ["1st", "2nd", "3rd", "4th"];
+    return {
+      id: uuid(),
+      tenantId: tenant.id,
+      label: `${ordinals[index]} rent installment`,
+      amount,
+      dueDate: formatDate(year, month, day),
+      status: "scheduled" as const,
+      paidAt: null,
+      installment,
+    };
+  });
 }
 
 function seedStore(): Store {
   const landlordId = uuid();
-  const tenantId = uuid();
+  const lowRiskTenantId = uuid();
+  const highRiskTenantId = uuid();
   const { year, month } = currentMonthYear();
   const dueDay = 1;
-  const secondDay = 15;
   const rent = 2000;
-  const firstAmount = 1000;
-  const secondAmount = 1000;
 
   const landlord: Landlord = {
     id: landlordId,
@@ -35,8 +77,8 @@ function seedStore(): Store {
     payoutAccountLast4: "4821",
   };
 
-  const tenant: Tenant = {
-    id: tenantId,
+  const lowRiskTenant: Tenant = {
+    id: lowRiskTenantId,
     name: "Jane Doe",
     email: "jane@demo.com",
     landlordId,
@@ -46,50 +88,106 @@ function seedStore(): Store {
     bankLast4: "9034",
     membershipFee: 14.99,
     billFeePercent: 1,
-    secondPaymentDay: secondDay,
     creditLimit: 2500,
     enrolled: true,
+    riskTier: "low",
+    creditScore: 742,
+    splitCount: 4,
+    creditCheckComplete: true,
+    rentalHistoryComplete: true,
+    onboardingComplete: true,
+  };
+
+  const highRiskTenant: Tenant = {
+    id: highRiskTenantId,
+    name: "Marcus Lee",
+    email: "marcus@demo.com",
+    landlordId,
+    unit: "2A",
+    monthlyRent: 1600,
+    rentDueDay: dueDay,
+    bankLast4: "7712",
+    membershipFee: 14.99,
+    billFeePercent: 1,
+    creditLimit: 2000,
+    enrolled: true,
+    riskTier: "high",
+    creditScore: 598,
+    splitCount: 2,
+    creditCheckComplete: true,
+    rentalHistoryComplete: true,
+    onboardingComplete: true,
   };
 
   const users: User[] = [
-    { id: uuid(), email: "jane@demo.com", name: "Jane Doe", role: "tenant", tenantId },
+    { id: uuid(), email: "jane@demo.com", name: "Jane Doe", role: "tenant", tenantId: lowRiskTenantId },
+    { id: uuid(), email: "marcus@demo.com", name: "Marcus Lee", role: "tenant", tenantId: highRiskTenantId },
     { id: uuid(), email: "owner@sunset.com", name: "Sunset Apartments", role: "landlord", landlordId },
-    { id: uuid(), email: "admin@theunleashed.app", name: "The Unleashed Admin", role: "admin" },
+    { id: uuid(), email: "admin@flexrent.app", name: "FlexRent Admin", role: "admin" },
   ];
 
-  const payments: Payment[] = [
-    {
-      id: uuid(),
-      tenantId,
-      label: "1st rent installment",
-      amount: firstAmount,
-      dueDate: formatDate(year, month, dueDay),
-      status: "scheduled",
-      paidAt: null,
-      installment: 1,
-    },
-    {
-      id: uuid(),
-      tenantId,
-      label: "2nd rent installment",
-      amount: secondAmount,
-      dueDate: formatDate(year, month, secondDay),
-      status: "scheduled",
-      paidAt: null,
-      installment: 2,
-    },
-  ];
+  const lowRiskPayments = generatePaymentsForTenant(lowRiskTenant);
+  const highRiskPayments = generatePaymentsForTenant(highRiskTenant);
 
   const payouts: LandlordPayout[] = [
     {
       id: uuid(),
       landlordId,
-      tenantId,
-      tenantName: tenant.name,
-      unit: tenant.unit,
+      tenantId: lowRiskTenantId,
+      tenantName: lowRiskTenant.name,
+      unit: lowRiskTenant.unit,
       amount: rent,
       paidOn: formatDate(year, month, dueDay),
       status: "pending",
+    },
+    {
+      id: uuid(),
+      landlordId,
+      tenantId: highRiskTenantId,
+      tenantName: highRiskTenant.name,
+      unit: highRiskTenant.unit,
+      amount: highRiskTenant.monthlyRent,
+      paidOn: formatDate(year, month, dueDay),
+      status: "pending",
+    },
+  ];
+
+  const creditChecks: CreditCheck[] = [
+    {
+      tenantId: lowRiskTenantId,
+      fullLegalName: "Jane Doe",
+      dateOfBirth: "1992-04-12",
+      ssnLast4: "4821",
+      annualIncome: 78000,
+      score: 742,
+      riskTier: "low",
+      checkedAt: new Date().toISOString(),
+    },
+    {
+      tenantId: highRiskTenantId,
+      fullLegalName: "Marcus Lee",
+      dateOfBirth: "1998-11-03",
+      ssnLast4: "1198",
+      annualIncome: 32000,
+      score: 598,
+      riskTier: "high",
+      checkedAt: new Date().toISOString(),
+    },
+  ];
+
+  const rentalHistory: RentalHistoryEntry[] = [
+    {
+      id: uuid(),
+      tenantId: lowRiskTenantId,
+      previousAddress: "118 Oak Street, Austin, TX 78701",
+      landlordName: "Riverview Properties",
+      landlordPhone: "(512) 555-0142",
+      landlordEmail: "leasing@riverview.com",
+      monthlyRent: 1850,
+      moveInDate: "2022-03-01",
+      moveOutDate: "2025-02-28",
+      reasonForLeaving: "Relocated for work",
+      submittedAt: new Date().toISOString(),
     },
   ];
 
@@ -97,18 +195,49 @@ function seedStore(): Store {
     {
       id: uuid(),
       at: new Date().toISOString(),
-      message: "Jane Doe enrolled with The Unleashed for unit 4B.",
+      message: "Jane Doe enrolled — low risk profile, rent split into 4 payments.",
       role: "tenant",
     },
     {
       id: uuid(),
       at: new Date().toISOString(),
-      message: "Rent split scheduled: $1,000 on the 1st and $1,000 on the 15th.",
+      message: "Marcus Lee enrolled — high risk profile, rent split into 2 payments.",
       role: "tenant",
     },
   ];
 
-  return { users, landlords: [landlord], tenants: [tenant], payments, payouts, activity, sessions: {} };
+  return {
+    users,
+    landlords: [landlord],
+    tenants: [lowRiskTenant, highRiskTenant],
+    payments: [...lowRiskPayments, ...highRiskPayments],
+    payouts,
+    creditChecks,
+    rentalHistory,
+    utilityBills: [],
+    activity,
+    sessions: {},
+  };
+}
+
+function migrateStore(raw: Store): Store {
+  for (const tenant of raw.tenants) {
+    tenant.riskTier ??= tenant.enrolled ? "low" : null;
+    tenant.creditScore ??= tenant.enrolled ? 700 : null;
+    tenant.splitCount ??= tenant.riskTier === "high" ? 2 : 4;
+    tenant.creditCheckComplete ??= tenant.enrolled;
+    tenant.rentalHistoryComplete ??= tenant.enrolled;
+    tenant.onboardingComplete ??= tenant.enrolled;
+  }
+  raw.creditChecks ??= [];
+  raw.rentalHistory ??= [];
+  raw.utilityBills ??= [];
+  for (const payment of raw.payments) {
+    if (payment.installment !== 1 && payment.installment !== 2 && payment.installment !== 3 && payment.installment !== 4) {
+      payment.installment = 1;
+    }
+  }
+  return raw;
 }
 
 function loadStore(): Store {
@@ -118,7 +247,7 @@ function loadStore(): Store {
     fs.writeFileSync(DATA_FILE, JSON.stringify(seeded, null, 2));
     return seeded;
   }
-  return JSON.parse(fs.readFileSync(DATA_FILE, "utf-8")) as Store;
+  return migrateStore(JSON.parse(fs.readFileSync(DATA_FILE, "utf-8")) as Store);
 }
 
 let store = loadStore();
@@ -190,7 +319,7 @@ export function createLandlordAccount(input: { name: string; email: string }) {
 
   store.landlords.push(landlord);
   store.users.push(user);
-  addActivity(`${name} created a landlord account.`, "landlord");
+  addActivity(`${name} created a landlord account on FlexRent.`, "landlord");
   return { landlord, user };
 }
 
@@ -200,7 +329,6 @@ export function createTenantAccount(input: {
   landlordId: string;
   unit: string;
   monthlyRent: number;
-  secondPaymentDay?: number;
 }) {
   const email = input.email.trim().toLowerCase();
   const name = input.name.trim();
@@ -212,28 +340,26 @@ export function createTenantAccount(input: {
     throw new Error("Monthly rent must be at least $100");
   }
 
-  const rent = input.monthlyRent;
-  const secondDay = input.secondPaymentDay ?? 15;
-  const dueDay = 1;
-  const firstAmount = Math.round((rent / 2) * 100) / 100;
-  const secondAmount = Math.round((rent - firstAmount) * 100) / 100;
-  const { year, month } = currentMonthYear();
   const tenantId = uuid();
-
   const tenant: Tenant = {
     id: tenantId,
     name,
     email,
     landlordId: input.landlordId,
     unit,
-    monthlyRent: rent,
-    rentDueDay: dueDay,
+    monthlyRent: input.monthlyRent,
+    rentDueDay: 1,
     bankLast4: randomLast4(),
     membershipFee: 14.99,
     billFeePercent: 1,
-    secondPaymentDay: secondDay,
-    creditLimit: Math.max(2500, rent * 2),
-    enrolled: true,
+    creditLimit: Math.max(2500, input.monthlyRent * 2),
+    enrolled: false,
+    riskTier: null,
+    creditScore: null,
+    splitCount: 4,
+    creditCheckComplete: false,
+    rentalHistoryComplete: false,
+    onboardingComplete: false,
   };
 
   const user: User = {
@@ -244,44 +370,181 @@ export function createTenantAccount(input: {
     tenantId,
   };
 
-  const payments: Payment[] = [
-    {
-      id: uuid(),
-      tenantId,
-      label: "1st rent installment",
-      amount: firstAmount,
-      dueDate: formatDate(year, month, dueDay),
-      status: "scheduled",
-      paidAt: null,
-      installment: 1,
-    },
-    {
-      id: uuid(),
-      tenantId,
-      label: "2nd rent installment",
-      amount: secondAmount,
-      dueDate: formatDate(year, month, secondDay),
-      status: "scheduled",
-      paidAt: null,
-      installment: 2,
-    },
-  ];
-
-  const payout: LandlordPayout = {
-    id: uuid(),
-    landlordId: input.landlordId,
-    tenantId,
-    tenantName: name,
-    unit,
-    amount: rent,
-    paidOn: formatDate(year, month, dueDay),
-    status: "pending",
-  };
-
   store.tenants.push(tenant);
   store.users.push(user);
-  store.payments.push(...payments);
-  store.payouts.push(payout);
-  addActivity(`${name} created a tenant account for unit ${unit}.`, "tenant");
+  addActivity(`${name} created a tenant account for unit ${unit}. Onboarding required.`, "tenant");
   return { tenant, user };
+}
+
+export function runCreditCheck(
+  tenantId: string,
+  input: {
+    fullLegalName: string;
+    dateOfBirth: string;
+    ssnLast4: string;
+    annualIncome: number;
+  },
+) {
+  const tenant = findTenant(tenantId);
+  if (!tenant) throw new Error("Tenant not found");
+  if (tenant.creditCheckComplete) throw new Error("Credit check already completed");
+
+  const score = mockCreditScore(input);
+  const riskTier = scoreToRiskTier(score);
+  const splitCount = riskTierToSplitCount(riskTier);
+
+  const check: CreditCheck = {
+    tenantId,
+    fullLegalName: input.fullLegalName.trim(),
+    dateOfBirth: input.dateOfBirth,
+    ssnLast4: input.ssnLast4,
+    annualIncome: input.annualIncome,
+    score,
+    riskTier,
+    checkedAt: new Date().toISOString(),
+  };
+
+  store.creditChecks = store.creditChecks.filter((c) => c.tenantId !== tenantId);
+  store.creditChecks.push(check);
+
+  tenant.creditScore = score;
+  tenant.riskTier = riskTier;
+  tenant.splitCount = splitCount;
+  tenant.creditCheckComplete = true;
+  tenant.creditLimit = Math.max(tenant.monthlyRent * splitCount, 2500);
+
+  addActivity(
+    `${tenant.name} completed soft credit check — ${riskTier} risk (score ${score}), ${splitCount}-payment split.`,
+    "tenant",
+  );
+
+  maybeCompleteOnboarding(tenant);
+  persist();
+  return { check, tenant };
+}
+
+export function submitRentalHistory(
+  tenantId: string,
+  input: {
+    previousAddress: string;
+    landlordName: string;
+    landlordPhone: string;
+    landlordEmail: string;
+    monthlyRent: number;
+    moveInDate: string;
+    moveOutDate: string;
+    reasonForLeaving: string;
+  },
+) {
+  const tenant = findTenant(tenantId);
+  if (!tenant) throw new Error("Tenant not found");
+  if (tenant.rentalHistoryComplete) throw new Error("Rental history already submitted");
+
+  const entry: RentalHistoryEntry = {
+    id: uuid(),
+    tenantId,
+    previousAddress: input.previousAddress.trim(),
+    landlordName: input.landlordName.trim(),
+    landlordPhone: input.landlordPhone.trim(),
+    landlordEmail: input.landlordEmail.trim(),
+    monthlyRent: input.monthlyRent,
+    moveInDate: input.moveInDate,
+    moveOutDate: input.moveOutDate,
+    reasonForLeaving: input.reasonForLeaving.trim(),
+    submittedAt: new Date().toISOString(),
+  };
+
+  store.rentalHistory = store.rentalHistory.filter((r) => r.tenantId !== tenantId);
+  store.rentalHistory.push(entry);
+  tenant.rentalHistoryComplete = true;
+
+  addActivity(`${tenant.name} submitted rental history for verification.`, "tenant");
+  maybeCompleteOnboarding(tenant);
+  persist();
+  return { entry, tenant };
+}
+
+function maybeCompleteOnboarding(tenant: Tenant) {
+  if (!tenant.creditCheckComplete || !tenant.rentalHistoryComplete || tenant.onboardingComplete) {
+    return;
+  }
+
+  tenant.onboardingComplete = true;
+  tenant.enrolled = true;
+
+  store.payments = store.payments.filter((p) => p.tenantId !== tenant.id);
+  const payments = generatePaymentsForTenant(tenant);
+  store.payments.push(...payments);
+
+  const { year, month } = currentMonthYear();
+  store.payouts.push({
+    id: uuid(),
+    landlordId: tenant.landlordId,
+    tenantId: tenant.id,
+    tenantName: tenant.name,
+    unit: tenant.unit,
+    amount: tenant.monthlyRent,
+    paidOn: formatDate(year, month, tenant.rentDueDay),
+    status: "pending",
+  });
+
+  addActivity(
+    `${tenant.name} completed onboarding — rent split into ${tenant.splitCount} payments.`,
+    "tenant",
+  );
+}
+
+export function createUtilityBill(
+  tenantId: string,
+  input: { provider: string; amount: number; dueDate: string; fileName: string; filePath: string },
+) {
+  const tenant = findTenant(tenantId);
+  if (!tenant) throw new Error("Tenant not found");
+  if (!tenant.onboardingComplete) throw new Error("Complete onboarding before uploading bills");
+
+  const bill: UtilityBill = {
+    id: uuid(),
+    tenantId,
+    provider: input.provider.trim(),
+    amount: input.amount,
+    dueDate: input.dueDate,
+    fileName: input.fileName,
+    filePath: input.filePath,
+    status: "pending",
+    paidAt: null,
+    submittedAt: new Date().toISOString(),
+  };
+
+  store.utilityBills.push(bill);
+  addActivity(`${tenant.name} uploaded a ${bill.provider} bill for $${bill.amount}.`, "tenant");
+  persist();
+  return bill;
+}
+
+export function payUtilityBill(tenantId: string, billId: string) {
+  const bill = store.utilityBills.find((b) => b.id === billId && b.tenantId === tenantId);
+  if (!bill) throw new Error("Bill not found");
+  if (bill.status === "paid") throw new Error("Bill already paid");
+
+  bill.status = "processing";
+  persist();
+
+  setTimeout(() => {
+    const current = store.utilityBills.find((b) => b.id === billId);
+    if (!current) return;
+    current.status = "paid";
+    current.paidAt = new Date().toISOString();
+    const tenant = findTenant(tenantId);
+    addActivity(
+      `${tenant?.name ?? "Tenant"} paid ${current.provider} bill ($${current.amount}).`,
+      "tenant",
+    );
+    persist();
+  }, 1200);
+
+  return bill;
+}
+
+export function ensureUploadsDir() {
+  if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }

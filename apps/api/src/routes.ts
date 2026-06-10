@@ -1,20 +1,46 @@
+import fs from "node:fs";
+import path from "node:path";
 import { Router } from "express";
+import multer from "multer";
 import { v4 as uuid } from "uuid";
+import { riskTierLabel } from "./risk.js";
 import {
   addActivity,
   createLandlordAccount,
   createTenantAccount,
+  createUtilityBill,
+  ensureUploadsDir,
   findLandlord,
   findTenant,
   findUserByEmail,
   getStore,
   listLandlordsPublic,
+  payUtilityBill,
   persist,
   resetStore,
+  runCreditCheck,
+  submitRentalHistory,
+  UPLOADS_DIR,
 } from "./store.js";
 import type { UserRole } from "./types.js";
 
 const router = Router();
+
+ensureUploadsDir();
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      ensureUploadsDir();
+      cb(null, UPLOADS_DIR);
+    },
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      cb(null, `${uuid()}${ext}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 function getSessionUser(token: string | undefined) {
   if (!token) return null;
@@ -49,7 +75,7 @@ function tenantFees(tenant: { monthlyRent: number; membershipFee: number; billFe
 }
 
 router.get("/health", (_req, res) => {
-  res.json({ ok: true, service: "the-unleashed-api", mode: "demo" });
+  res.json({ ok: true, service: "flexrent-api", mode: "demo" });
 });
 
 router.get("/public/landlords", (_req, res) => {
@@ -71,13 +97,12 @@ router.post("/auth/register-landlord", (req, res) => {
 });
 
 router.post("/auth/register-tenant", (req, res) => {
-  const { name, email, landlordId, unit, monthlyRent, secondPaymentDay } = req.body as {
+  const { name, email, landlordId, unit, monthlyRent } = req.body as {
     name?: string;
     email?: string;
     landlordId?: string;
     unit?: string;
     monthlyRent?: number;
-    secondPaymentDay?: number;
   };
   if (!landlordId) {
     res.status(400).json({ error: "Landlord is required" });
@@ -90,7 +115,6 @@ router.post("/auth/register-tenant", (req, res) => {
       landlordId,
       unit: unit ?? "",
       monthlyRent: Number(monthlyRent),
-      secondPaymentDay: secondPaymentDay ? Number(secondPaymentDay) : undefined,
     });
     const token = uuid();
     const store = getStore();
@@ -142,6 +166,132 @@ router.get("/me", (req, res) => {
   res.json({ user: auth.user });
 });
 
+router.get("/tenant/onboarding", (req, res) => {
+  const auth = requireAuth(req, ["tenant"]);
+  if ("error" in auth) {
+    res.status(auth.status).json({ error: auth.error });
+    return;
+  }
+
+  const store = getStore();
+  const tenant = store.tenants.find((t) => t.id === auth.user.tenantId);
+  if (!tenant) {
+    res.status(404).json({ error: "Tenant not found" });
+    return;
+  }
+
+  const creditCheck = store.creditChecks.find((c) => c.tenantId === tenant.id) ?? null;
+  const rentalHistory = store.rentalHistory.find((r) => r.tenantId === tenant.id) ?? null;
+
+  res.json({
+    tenant,
+    creditCheck,
+    rentalHistory,
+    steps: {
+      creditCheck: tenant.creditCheckComplete,
+      rentalHistory: tenant.rentalHistoryComplete,
+      complete: tenant.onboardingComplete,
+    },
+  });
+});
+
+router.post("/tenant/credit-check", (req, res) => {
+  const auth = requireAuth(req, ["tenant"]);
+  if ("error" in auth) {
+    res.status(auth.status).json({ error: auth.error });
+    return;
+  }
+
+  const { fullLegalName, dateOfBirth, ssnLast4, annualIncome } = req.body as {
+    fullLegalName?: string;
+    dateOfBirth?: string;
+    ssnLast4?: string;
+    annualIncome?: number;
+  };
+
+  if (!fullLegalName || !dateOfBirth || !ssnLast4 || !annualIncome) {
+    res.status(400).json({ error: "All credit check fields are required" });
+    return;
+  }
+  if (!/^\d{4}$/.test(ssnLast4)) {
+    res.status(400).json({ error: "SSN last 4 must be exactly 4 digits" });
+    return;
+  }
+
+  try {
+    const result = runCreditCheck(auth.user.tenantId!, {
+      fullLegalName,
+      dateOfBirth,
+      ssnLast4,
+      annualIncome: Number(annualIncome),
+    });
+    res.json({
+      ...result,
+      message: `Soft credit check complete. ${riskTierLabel(result.check.riskTier)} — rent split into ${result.tenant.splitCount} payments.`,
+    });
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "Credit check failed" });
+  }
+});
+
+router.post("/tenant/rental-history", (req, res) => {
+  const auth = requireAuth(req, ["tenant"]);
+  if ("error" in auth) {
+    res.status(auth.status).json({ error: auth.error });
+    return;
+  }
+
+  const {
+    previousAddress,
+    landlordName,
+    landlordPhone,
+    landlordEmail,
+    monthlyRent,
+    moveInDate,
+    moveOutDate,
+    reasonForLeaving,
+  } = req.body as {
+    previousAddress?: string;
+    landlordName?: string;
+    landlordPhone?: string;
+    landlordEmail?: string;
+    monthlyRent?: number;
+    moveInDate?: string;
+    moveOutDate?: string;
+    reasonForLeaving?: string;
+  };
+
+  if (
+    !previousAddress ||
+    !landlordName ||
+    !landlordPhone ||
+    !landlordEmail ||
+    !monthlyRent ||
+    !moveInDate ||
+    !moveOutDate ||
+    !reasonForLeaving
+  ) {
+    res.status(400).json({ error: "All rental history fields are required" });
+    return;
+  }
+
+  try {
+    const result = submitRentalHistory(auth.user.tenantId!, {
+      previousAddress,
+      landlordName,
+      landlordPhone,
+      landlordEmail,
+      monthlyRent: Number(monthlyRent),
+      moveInDate,
+      moveOutDate,
+      reasonForLeaving,
+    });
+    res.json(result);
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "Submission failed" });
+  }
+});
+
 router.get("/tenant/dashboard", (req, res) => {
   const auth = requireAuth(req, ["tenant"]);
   if ("error" in auth) {
@@ -156,60 +306,33 @@ router.get("/tenant/dashboard", (req, res) => {
     return;
   }
 
+  if (!tenant.onboardingComplete) {
+    res.status(403).json({ error: "Onboarding incomplete", onboardingRequired: true });
+    return;
+  }
+
   const landlord = findLandlord(tenant.landlordId);
   const payments = store.payments.filter((p) => p.tenantId === tenant.id);
   const fees = tenantFees(tenant);
+  const creditCheck = store.creditChecks.find((c) => c.tenantId === tenant.id) ?? null;
+  const utilityBills = store.utilityBills.filter((b) => b.tenantId === tenant.id);
 
   res.json({
     tenant,
     landlord,
     payments,
     fees,
+    creditCheck,
+    utilityBills,
     summary: {
       monthlyRent: tenant.monthlyRent,
-      splitCount: 2,
+      splitCount: tenant.splitCount,
+      riskTier: tenant.riskTier,
+      creditScore: tenant.creditScore,
       landlordPaidOnDueDate: payments.some((p) => p.installment === 1 && p.status === "paid"),
       nextPayment: payments.find((p) => p.status === "scheduled") ?? null,
     },
   });
-});
-
-router.patch("/tenant/schedule", (req, res) => {
-  const auth = requireAuth(req, ["tenant"]);
-  if ("error" in auth) {
-    res.status(auth.status).json({ error: auth.error });
-    return;
-  }
-
-  const { secondPaymentDay } = req.body as { secondPaymentDay?: number };
-  if (!secondPaymentDay || secondPaymentDay < 2 || secondPaymentDay > 28) {
-    res.status(400).json({ error: "secondPaymentDay must be between 2 and 28" });
-    return;
-  }
-
-  const store = getStore();
-  const tenant = store.tenants.find((t) => t.id === auth.user.tenantId);
-  if (!tenant) {
-    res.status(404).json({ error: "Tenant not found" });
-    return;
-  }
-
-  tenant.secondPaymentDay = secondPaymentDay;
-  const now = new Date();
-  const secondDue = new Date(now.getFullYear(), now.getMonth(), secondPaymentDay)
-    .toISOString()
-    .slice(0, 10);
-
-  const second = store.payments.find((p) => p.tenantId === tenant.id && p.installment === 2);
-  if (second) second.dueDate = secondDue;
-
-  addActivity(
-    `${tenant.name} rescheduled 2nd payment to the ${secondPaymentDay}th.`,
-    "tenant",
-  );
-  persist();
-
-  res.json({ ok: true, tenant, payments: store.payments.filter((p) => p.tenantId === tenant.id) });
 });
 
 router.post("/tenant/payments/:id/pay", (req, res) => {
@@ -249,7 +372,7 @@ router.post("/tenant/payments/:id/pay", (req, res) => {
       );
       if (payout) payout.status = "completed";
       addActivity(
-        `The Unleashed paid ${tenant.landlordId ? findLandlord(tenant.landlordId)?.name : "landlord"} $${tenant.monthlyRent} in full for ${tenant.name}.`,
+        `FlexRent paid ${tenant.landlordId ? findLandlord(tenant.landlordId)?.name : "landlord"} $${tenant.monthlyRent} in full for ${tenant.name}.`,
         "tenant",
       );
     }
@@ -261,7 +384,71 @@ router.post("/tenant/payments/:id/pay", (req, res) => {
     persist();
   }, 1200);
 
-  res.json({ ok: true, payment, message: "Processing demo payment…" });
+  res.json({ ok: true, payment, message: "Processing payment…" });
+});
+
+router.get("/tenant/utility-bills", (req, res) => {
+  const auth = requireAuth(req, ["tenant"]);
+  if ("error" in auth) {
+    res.status(auth.status).json({ error: auth.error });
+    return;
+  }
+
+  const store = getStore();
+  const bills = store.utilityBills.filter((b) => b.tenantId === auth.user.tenantId);
+  res.json({ bills });
+});
+
+router.post("/tenant/utility-bills", upload.single("billFile"), (req, res) => {
+  const auth = requireAuth(req, ["tenant"]);
+  if ("error" in auth) {
+    res.status(auth.status).json({ error: auth.error });
+    return;
+  }
+
+  const { provider, amount, dueDate } = req.body as {
+    provider?: string;
+    amount?: string;
+    dueDate?: string;
+  };
+
+  if (!provider || !amount || !dueDate) {
+    res.status(400).json({ error: "Provider, amount, and due date are required" });
+    return;
+  }
+  if (!req.file) {
+    res.status(400).json({ error: "Bill file upload is required" });
+    return;
+  }
+
+  try {
+    const bill = createUtilityBill(auth.user.tenantId!, {
+      provider,
+      amount: Number(amount),
+      dueDate,
+      fileName: req.file.originalname,
+      filePath: req.file.filename,
+    });
+    res.json({ bill, message: "Utility bill uploaded successfully." });
+  } catch (e) {
+    if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    res.status(400).json({ error: e instanceof Error ? e.message : "Upload failed" });
+  }
+});
+
+router.post("/tenant/utility-bills/:id/pay", (req, res) => {
+  const auth = requireAuth(req, ["tenant"]);
+  if ("error" in auth) {
+    res.status(auth.status).json({ error: auth.error });
+    return;
+  }
+
+  try {
+    const bill = payUtilityBill(auth.user.tenantId!, req.params.id);
+    res.json({ ok: true, bill, message: "Processing utility bill payment…" });
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "Payment failed" });
+  }
 });
 
 router.get("/landlord/dashboard", (req, res) => {
@@ -287,7 +474,8 @@ router.get("/landlord/dashboard", (req, res) => {
     payouts,
     stats: {
       enrolledTenants: tenants.filter((t) => t.enrolled).length,
-      totalMonthlyRent: tenants.reduce((sum, t) => sum + t.monthlyRent, 0),
+      pendingOnboarding: tenants.filter((t) => !t.onboardingComplete).length,
+      totalMonthlyRent: tenants.filter((t) => t.enrolled).reduce((sum, t) => sum + t.monthlyRent, 0),
       onTimePayoutRate: payouts.length
         ? Math.round(
             (payouts.filter((p) => p.status === "completed").length / payouts.length) * 100,
@@ -307,6 +495,7 @@ router.get("/admin/overview", (req, res) => {
   const store = getStore();
   const paidPayments = store.payments.filter((p) => p.status === "paid");
   const scheduledPayments = store.payments.filter((p) => p.status === "scheduled");
+  const paidBills = store.utilityBills.filter((b) => b.status === "paid");
 
   res.json({
     stats: {
@@ -315,7 +504,10 @@ router.get("/admin/overview", (req, res) => {
       enrolledTenants: store.tenants.filter((t) => t.enrolled).length,
       paymentsCompleted: paidPayments.length,
       paymentsScheduled: scheduledPayments.length,
-      volumeProcessed: paidPayments.reduce((sum, p) => sum + p.amount, 0),
+      utilityBillsPaid: paidBills.length,
+      volumeProcessed:
+        paidPayments.reduce((sum, p) => sum + p.amount, 0) +
+        paidBills.reduce((sum, b) => sum + b.amount, 0),
     },
     users: store.users,
     tenants: store.tenants,

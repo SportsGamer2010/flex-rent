@@ -1,5 +1,6 @@
 node_modules/
 dist/
 apps/api/data/store.json
+apps/api/uploads/
 *.log
 .DS_Store

@@ -20,7 +20,6 @@ interface AuthContextValue {
     landlordId: string;
     unit: string;
     monthlyRent: number;
-    secondPaymentDay?: number;
   }) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -70,7 +69,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       landlordId: string;
       unit: string;
       monthlyRent: number;
-      secondPaymentDay?: number;
     }) => {
       applySession(await api.registerTenant(input));
     },

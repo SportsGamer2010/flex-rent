@@ -2,6 +2,10 @@ export type UserRole = "tenant" | "landlord" | "admin";
 
 export type PaymentStatus = "scheduled" | "paid" | "failed" | "processing";
 
+export type RiskTier = "low" | "medium" | "high";
+
+export type UtilityBillStatus = "pending" | "paid" | "processing";
+
 export interface User {
   id: string;
   email: string;
@@ -29,9 +33,52 @@ export interface Tenant {
   bankLast4: string;
   membershipFee: number;
   billFeePercent: number;
-  secondPaymentDay: number | null;
   creditLimit: number;
   enrolled: boolean;
+  riskTier: RiskTier | null;
+  creditScore: number | null;
+  splitCount: 2 | 4;
+  creditCheckComplete: boolean;
+  rentalHistoryComplete: boolean;
+  onboardingComplete: boolean;
+}
+
+export interface CreditCheck {
+  tenantId: string;
+  fullLegalName: string;
+  dateOfBirth: string;
+  ssnLast4: string;
+  annualIncome: number;
+  score: number;
+  riskTier: RiskTier;
+  checkedAt: string;
+}
+
+export interface RentalHistoryEntry {
+  id: string;
+  tenantId: string;
+  previousAddress: string;
+  landlordName: string;
+  landlordPhone: string;
+  landlordEmail: string;
+  monthlyRent: number;
+  moveInDate: string;
+  moveOutDate: string;
+  reasonForLeaving: string;
+  submittedAt: string;
+}
+
+export interface UtilityBill {
+  id: string;
+  tenantId: string;
+  provider: string;
+  amount: number;
+  dueDate: string;
+  fileName: string;
+  filePath: string;
+  status: UtilityBillStatus;
+  paidAt: string | null;
+  submittedAt: string;
 }
 
 export interface Payment {
@@ -42,7 +89,7 @@ export interface Payment {
   dueDate: string;
   status: PaymentStatus;
   paidAt: string | null;
-  installment: 1 | 2;
+  installment: 1 | 2 | 3 | 4;
 }
 
 export interface LandlordPayout {
@@ -69,6 +116,9 @@ export interface Store {
   tenants: Tenant[];
   payments: Payment[];
   payouts: LandlordPayout[];
+  creditChecks: CreditCheck[];
+  rentalHistory: RentalHistoryEntry[];
+  utilityBills: UtilityBill[];
   activity: Activity[];
   sessions: Record<string, string>;
 }

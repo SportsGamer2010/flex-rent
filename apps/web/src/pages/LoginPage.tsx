@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { api, type UserRole } from "../lib/api";
-import { APP_NAME } from "../lib/brand";
+import { APP_NAME, APP_TAGLINE } from "../lib/brand";
 
 const demoAccounts: Array<{
   role: UserRole;
@@ -15,20 +15,27 @@ const demoAccounts: Array<{
   {
     role: "tenant",
     email: "jane@demo.com",
-    title: "Tenant",
-    description: "Split $2,000 rent, pay installments, reschedule 2nd payment.",
+    title: "Tenant (low risk)",
+    description: "4-payment split, utility bills, completed onboarding.",
+    icon: User,
+  },
+  {
+    role: "tenant",
+    email: "marcus@demo.com",
+    title: "Tenant (high risk)",
+    description: "2-payment split — see how risk tier affects schedule.",
     icon: User,
   },
   {
     role: "landlord",
     email: "owner@sunset.com",
     title: "Landlord",
-    description: "See enrolled tenants and guaranteed on-time payouts.",
+    description: "View enrolled tenants, risk profiles, and guaranteed payouts.",
     icon: Building2,
   },
   {
     role: "admin",
-    email: "admin@theunleashed.app",
+    email: "admin@flexrent.app",
     title: "Admin",
     description: "Platform overview, activity feed, and demo reset.",
     icon: Shield,
@@ -37,14 +44,11 @@ const demoAccounts: Array<{
 
 type SignupTab = "landlord" | "tenant";
 
-const inputClass =
-  "mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none transition focus:border-brand-500/50";
-
 export default function LoginPage() {
   const { user, login, registerLandlord, registerTenant } = useAuth();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState<UserRole | null>(null);
-  const [signupTab, setSignupTab] = useState<SignupTab>("tenant");
+  const [loading, setLoading] = useState<string | null>(null);
+  const [signupTab, setSignupTab] = useState<SignupTab>("landlord");
   const [signupLoading, setSignupLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [landlords, setLandlords] = useState<Array<{ id: string; name: string }>>([]);
@@ -56,7 +60,6 @@ export default function LoginPage() {
     landlordId: "",
     unit: "",
     monthlyRent: "1500",
-    secondPaymentDay: "15",
   });
 
   useEffect(() => {
@@ -74,7 +77,7 @@ export default function LoginPage() {
   if (user) return <Navigate to="/app" replace />;
 
   async function handleLogin(role: UserRole, email: string) {
-    setLoading(role);
+    setLoading(email);
     setError(null);
     try {
       await login(role, email);
@@ -111,7 +114,6 @@ export default function LoginPage() {
         landlordId: tenantForm.landlordId,
         unit: tenantForm.unit,
         monthlyRent: Number(tenantForm.monthlyRent),
-        secondPaymentDay: Number(tenantForm.secondPaymentDay),
       });
       navigate("/app");
     } catch (err) {
@@ -124,9 +126,10 @@ export default function LoginPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-12">
       <div className="text-center">
-        <h1 className="text-3xl font-bold text-white">{APP_NAME}</h1>
-        <p className="mt-2 text-slate-400">
-          Try the demo accounts below, or create your own tenant or landlord account.
+        <h1 className="font-serif-display text-3xl font-bold text-brand-100">{APP_NAME}</h1>
+        <p className="mt-2 text-neutral-400">{APP_TAGLINE}</p>
+        <p className="mt-1 text-sm text-neutral-500">
+          Try demo accounts or create your own landlord or tenant profile.
         </p>
       </div>
 
@@ -139,75 +142,75 @@ export default function LoginPage() {
       <div className="mt-8 grid gap-4">
         {demoAccounts.map((account) => (
           <button
-            key={account.role}
+            key={account.email}
             onClick={() => handleLogin(account.role, account.email)}
             disabled={loading !== null || signupLoading}
-            className="flex items-start gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-left transition hover:border-brand-500/40 hover:bg-white/[0.05] disabled:opacity-60"
+            className="flex items-start gap-4 rounded-2xl border border-brand-600/20 bg-surface-800/60 p-5 text-left transition hover:border-brand-500/40 hover:bg-surface-800 disabled:opacity-60"
           >
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-600/20 text-brand-100">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-brand-600/30 bg-brand-600/10 text-brand-200">
               <account.icon className="h-6 w-6" />
             </span>
             <span className="flex-1">
               <span className="flex items-center justify-between gap-2">
-                <span className="text-lg font-semibold text-white">{account.title}</span>
-                <span className="text-xs text-slate-500">{account.email}</span>
+                <span className="text-lg font-semibold text-brand-100">{account.title}</span>
+                <span className="text-xs text-neutral-500">{account.email}</span>
               </span>
-              <span className="mt-1 block text-sm text-slate-400">{account.description}</span>
-              {loading === account.role && (
-                <span className="mt-2 block text-sm text-accent-400">Signing in…</span>
+              <span className="mt-1 block text-sm text-neutral-400">{account.description}</span>
+              {loading === account.email && (
+                <span className="mt-2 block text-sm text-brand-400">Signing in…</span>
               )}
             </span>
           </button>
         ))}
       </div>
 
-      <div className="mt-10 rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+      <div className="mt-10 card-surface p-6">
         <div className="flex items-center gap-2">
-          <UserPlus className="h-5 w-5 text-accent-400" />
-          <h2 className="text-lg font-semibold text-white">Create your own account</h2>
+          <UserPlus className="h-5 w-5 text-brand-400" />
+          <h2 className="font-serif-display text-lg font-semibold text-brand-100">Create your account</h2>
         </div>
-        <p className="mt-1 text-sm text-slate-400">
-          No password needed — sign in instantly after creating an account.
+        <p className="mt-1 text-sm text-neutral-400">
+          Landlords get started instantly. Tenants complete credit check and rental history after signup.
         </p>
 
         <div className="mt-4 flex gap-2">
           <button
             type="button"
-            onClick={() => setSignupTab("tenant")}
-            className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-              signupTab === "tenant"
-                ? "bg-brand-600 text-white"
-                : "border border-white/10 text-slate-400 hover:text-white"
-            }`}
-          >
-            Tenant
-          </button>
-          <button
-            type="button"
             onClick={() => setSignupTab("landlord")}
             className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
               signupTab === "landlord"
-                ? "bg-brand-600 text-white"
-                : "border border-white/10 text-slate-400 hover:text-white"
+                ? "bg-brand-600 text-black"
+                : "border border-brand-600/20 text-neutral-400 hover:text-brand-200"
             }`}
           >
             Landlord
+          </button>
+          <button
+            type="button"
+            onClick={() => setSignupTab("tenant")}
+            className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+              signupTab === "tenant"
+                ? "bg-brand-600 text-black"
+                : "border border-brand-600/20 text-neutral-400 hover:text-brand-200"
+            }`}
+          >
+            Tenant
           </button>
         </div>
 
         {signupTab === "landlord" ? (
           <form onSubmit={handleLandlordSignup} className="mt-6 space-y-4">
-            <label className="block text-sm text-slate-400">
+            <label className="block text-sm text-neutral-400">
               Property / business name
               <input
                 required
                 value={landlordForm.name}
                 onChange={(e) => setLandlordForm({ ...landlordForm, name: e.target.value })}
                 placeholder="Sunset Apartments"
-                className={inputClass}
+                className="input-dark"
               />
             </label>
-            <label className="block text-sm text-slate-400">
+            <label className="block text-sm text-neutral-400">
               Email
               <input
                 required
@@ -215,30 +218,26 @@ export default function LoginPage() {
                 value={landlordForm.email}
                 onChange={(e) => setLandlordForm({ ...landlordForm, email: e.target.value })}
                 placeholder="owner@example.com"
-                className={inputClass}
+                className="input-dark"
               />
             </label>
-            <button
-              type="submit"
-              disabled={signupLoading}
-              className="w-full rounded-xl bg-brand-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-brand-700 disabled:opacity-60"
-            >
+            <button type="submit" disabled={signupLoading} className="btn-gold w-full">
               {signupLoading ? "Creating account…" : "Create landlord account"}
             </button>
           </form>
         ) : (
           <form onSubmit={handleTenantSignup} className="mt-6 space-y-4">
-            <label className="block text-sm text-slate-400">
+            <label className="block text-sm text-neutral-400">
               Your name
               <input
                 required
                 value={tenantForm.name}
                 onChange={(e) => setTenantForm({ ...tenantForm, name: e.target.value })}
                 placeholder="Jane Doe"
-                className={inputClass}
+                className="input-dark"
               />
             </label>
-            <label className="block text-sm text-slate-400">
+            <label className="block text-sm text-neutral-400">
               Email
               <input
                 required
@@ -246,21 +245,21 @@ export default function LoginPage() {
                 value={tenantForm.email}
                 onChange={(e) => setTenantForm({ ...tenantForm, email: e.target.value })}
                 placeholder="jane@example.com"
-                className={inputClass}
+                className="input-dark"
               />
             </label>
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block text-sm text-slate-400">
+              <label className="block text-sm text-neutral-400">
                 Unit
                 <input
                   required
                   value={tenantForm.unit}
                   onChange={(e) => setTenantForm({ ...tenantForm, unit: e.target.value })}
                   placeholder="4B"
-                  className={inputClass}
+                  className="input-dark"
                 />
               </label>
-              <label className="block text-sm text-slate-400">
+              <label className="block text-sm text-neutral-400">
                 Monthly rent ($)
                 <input
                   required
@@ -269,17 +268,17 @@ export default function LoginPage() {
                   step={50}
                   value={tenantForm.monthlyRent}
                   onChange={(e) => setTenantForm({ ...tenantForm, monthlyRent: e.target.value })}
-                  className={inputClass}
+                  className="input-dark"
                 />
               </label>
             </div>
-            <label className="block text-sm text-slate-400">
+            <label className="block text-sm text-neutral-400">
               Landlord / property
               <select
                 required
                 value={tenantForm.landlordId}
                 onChange={(e) => setTenantForm({ ...tenantForm, landlordId: e.target.value })}
-                className={inputClass}
+                className="input-dark"
               >
                 {landlords.length === 0 && (
                   <option value="">Create a landlord account first</option>
@@ -291,26 +290,15 @@ export default function LoginPage() {
                 ))}
               </select>
             </label>
-            <label className="block text-sm text-slate-400">
-              2nd payment day of month
-              <input
-                type="number"
-                min={5}
-                max={28}
-                value={tenantForm.secondPaymentDay}
-                onChange={(e) => setTenantForm({ ...tenantForm, secondPaymentDay: e.target.value })}
-                className={inputClass}
-              />
-            </label>
             <button
               type="submit"
               disabled={signupLoading || landlords.length === 0}
-              className="w-full rounded-xl bg-brand-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-brand-700 disabled:opacity-60"
+              className="btn-gold w-full"
             >
               {signupLoading ? "Creating account…" : "Create tenant account"}
             </button>
             {landlords.length === 0 && (
-              <p className="text-center text-xs text-slate-500">
+              <p className="text-center text-xs text-neutral-500">
                 Switch to the Landlord tab and create a property first.
               </p>
             )}

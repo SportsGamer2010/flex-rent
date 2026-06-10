@@ -1,16 +1,52 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Segoe UI", system-ui, -apple-system, sans-serif;
-  --color-brand-50: #f3f0ff;
-  --color-brand-100: #e8e0ff;
-  --color-brand-500: #6d28d9;
-  --color-brand-600: #5b21b6;
-  --color-brand-700: #4c1d95;
-  --color-accent-400: #2dd4bf;
-  --color-accent-500: #14b8a6;
+  --font-sans: "Georgia", "Times New Roman", "Segoe UI", system-ui, serif;
+  --font-display: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --color-brand-50: #fefce8;
+  --color-brand-100: #fef9c3;
+  --color-brand-200: #fde68a;
+  --color-brand-300: #fcd34d;
+  --color-brand-400: #fbbf24;
+  --color-brand-500: #d4af37;
+  --color-brand-600: #b8860b;
+  --color-brand-700: #92700a;
+  --color-brand-800: #78590a;
+  --color-brand-900: #422006;
+  --color-surface-900: #0a0a0a;
+  --color-surface-800: #141414;
+  --color-surface-700: #1a1a1a;
 }
 
 body {
-  @apply bg-slate-950 text-slate-100 antialiased;
+  @apply bg-surface-900 text-neutral-100 antialiased;
+  font-family: var(--font-display);
+}
+
+.font-serif-display {
+  font-family: var(--font-sans);
+}
+
+.gold-gradient-text {
+  @apply bg-gradient-to-r from-brand-200 via-brand-400 to-brand-600 bg-clip-text text-transparent;
+}
+
+.gold-border {
+  @apply border border-brand-600/30;
+}
+
+.card-surface {
+  @apply rounded-2xl border border-brand-600/20 bg-surface-800/80 shadow-xl shadow-black/40;
+}
+
+.btn-gold {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 py-3 text-sm font-semibold text-black transition hover:bg-brand-400 disabled:opacity-60;
+}
+
+.btn-outline-gold {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-brand-600/40 px-5 py-3 text-sm font-medium text-brand-200 transition hover:border-brand-400 hover:bg-brand-600/10 disabled:opacity-60;
+}
+
+.input-dark {
+  @apply mt-1 w-full rounded-xl border border-brand-600/20 bg-surface-900/80 px-4 py-3 text-sm text-white outline-none transition focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/30;
 }

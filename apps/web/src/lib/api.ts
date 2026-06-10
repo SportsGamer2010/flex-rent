@@ -1,6 +1,7 @@
-const TOKEN_KEY = "unleashed_demo_token";
+const TOKEN_KEY = "flexrent_demo_token";
 
 export type UserRole = "tenant" | "landlord" | "admin";
+export type RiskTier = "low" | "medium" | "high";
 
 export interface User {
   id: string;
@@ -12,9 +13,11 @@ export interface User {
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem(TOKEN_KEY);
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
   };
+  if (!(options.body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
   if (token) headers.Authorization = `Bearer ${token}`;
 
   const res = await fetch(path, { ...options, headers });
@@ -59,7 +62,6 @@ export const api = {
     landlordId: string;
     unit: string;
     monthlyRent: number;
-    secondPaymentDay?: number;
   }) {
     return request<{ token: string; user: User }>("/api/auth/register-tenant", {
       method: "POST",
@@ -72,17 +74,42 @@ export const api = {
   me() {
     return request<{ user: User }>("/api/me");
   },
+  tenantOnboarding() {
+    return request<TenantOnboarding>("/api/tenant/onboarding");
+  },
+  submitCreditCheck(input: {
+    fullLegalName: string;
+    dateOfBirth: string;
+    ssnLast4: string;
+    annualIncome: number;
+  }) {
+    return request<{ message: string; tenant: TenantProfile; check: CreditCheckResult }>(
+      "/api/tenant/credit-check",
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  },
+  submitRentalHistory(input: RentalHistoryInput) {
+    return request<{ tenant: TenantProfile; entry: RentalHistoryEntry }>("/api/tenant/rental-history", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
   tenantDashboard() {
     return request<TenantDashboard>("/api/tenant/dashboard");
   },
-  updateSchedule(secondPaymentDay: number) {
-    return request<{ ok: boolean }>("/api/tenant/schedule", {
-      method: "PATCH",
-      body: JSON.stringify({ secondPaymentDay }),
-    });
-  },
   payInstallment(paymentId: string) {
     return request<{ ok: boolean; message: string }>(`/api/tenant/payments/${paymentId}/pay`, {
+      method: "POST",
+    });
+  },
+  uploadUtilityBill(formData: FormData) {
+    return request<{ bill: UtilityBill; message: string }>("/api/tenant/utility-bills", {
+      method: "POST",
+      body: formData,
+    });
+  },
+  payUtilityBill(billId: string) {
+    return request<{ ok: boolean; message: string }>(`/api/tenant/utility-bills/${billId}/pay`, {
       method: "POST",
     });
   },
@@ -99,16 +126,69 @@ export const api = {
   },
 };
 
-export interface TenantDashboard {
-  tenant: {
-    name: string;
-    unit: string;
-    monthlyRent: number;
-    rentDueDay: number;
-    secondPaymentDay: number | null;
-    bankLast4: string;
-    creditLimit: number;
+export interface TenantProfile {
+  name: string;
+  unit: string;
+  monthlyRent: number;
+  rentDueDay: number;
+  bankLast4: string;
+  creditLimit: number;
+  enrolled: boolean;
+  riskTier: RiskTier | null;
+  creditScore: number | null;
+  splitCount: 2 | 4;
+  creditCheckComplete: boolean;
+  rentalHistoryComplete: boolean;
+  onboardingComplete: boolean;
+}
+
+export interface CreditCheckResult {
+  score: number;
+  riskTier: RiskTier;
+  checkedAt: string;
+}
+
+export interface RentalHistoryInput {
+  previousAddress: string;
+  landlordName: string;
+  landlordPhone: string;
+  landlordEmail: string;
+  monthlyRent: number;
+  moveInDate: string;
+  moveOutDate: string;
+  reasonForLeaving: string;
+}
+
+export interface RentalHistoryEntry extends RentalHistoryInput {
+  id: string;
+  tenantId: string;
+  submittedAt: string;
+}
+
+export interface TenantOnboarding {
+  tenant: TenantProfile;
+  creditCheck: CreditCheckResult | null;
+  rentalHistory: RentalHistoryEntry | null;
+  steps: {
+    creditCheck: boolean;
+    rentalHistory: boolean;
+    complete: boolean;
   };
+}
+
+export interface UtilityBill {
+  id: string;
+  provider: string;
+  amount: number;
+  dueDate: string;
+  fileName: string;
+  status: string;
+  paidAt: string | null;
+  submittedAt: string;
+}
+
+export interface TenantDashboard {
+  tenant: TenantProfile;
   landlord: { name: string } | undefined;
   payments: Array<{
     id: string;
@@ -119,9 +199,13 @@ export interface TenantDashboard {
     installment: number;
   }>;
   fees: { membershipFee: number; billFee: number; total: number };
+  creditCheck: CreditCheckResult | null;
+  utilityBills: UtilityBill[];
   summary: {
     monthlyRent: number;
-    splitCount: number;
+    splitCount: 2 | 4;
+    riskTier: RiskTier | null;
+    creditScore: number | null;
     landlordPaidOnDueDate: boolean;
     nextPayment: { id: string; label: string; amount: number; dueDate: string } | null;
   };
@@ -134,7 +218,10 @@ export interface LandlordDashboard {
     unit: string;
     monthlyRent: number;
     enrolled: boolean;
-    secondPaymentDay: number | null;
+    riskTier: RiskTier | null;
+    splitCount: 2 | 4;
+    creditScore: number | null;
+    onboardingComplete: boolean;
   }>;
   payouts: Array<{
     tenantName: string;
@@ -145,6 +232,7 @@ export interface LandlordDashboard {
   }>;
   stats: {
     enrolledTenants: number;
+    pendingOnboarding: number;
     totalMonthlyRent: number;
     onTimePayoutRate: number;
   };
@@ -157,6 +245,7 @@ export interface AdminOverview {
     enrolledTenants: number;
     paymentsCompleted: number;
     paymentsScheduled: number;
+    utilityBillsPaid: number;
     volumeProcessed: number;
   };
   activity: Array<{ at: string; message: string; role?: string }>;
