@@ -9,6 +9,8 @@ import type {
   Landlord,
   LandlordPayout,
   Payment,
+  PaymentMethodType,
+  PlatformPaymentSettings,
   RentalHistoryEntry,
   Store,
   Tenant,
@@ -58,8 +60,24 @@ export function generatePaymentsForTenant(tenant: Tenant): Payment[] {
       status: "scheduled" as const,
       paidAt: null,
       installment,
+      paymentMethod: null,
+      paymentReference: null,
     };
   });
+}
+
+export function defaultPlatformPaymentSettings(): PlatformPaymentSettings {
+  return {
+    businessName: "The Unleashed",
+    bankName: "",
+    accountHolderName: "",
+    routingNumber: "",
+    accountNumber: "",
+    cashAppCashtag: "",
+    creditCardEnabled: true,
+    cashAppEnabled: true,
+    configuredAt: null,
+  };
 }
 
 function seedStore(): Store {
@@ -223,6 +241,7 @@ function seedStore(): Store {
     utilityBills: [],
     activity,
     sessions: {},
+    platformPaymentSettings: defaultPlatformPaymentSettings(),
   };
 }
 
@@ -247,7 +266,14 @@ function migrateStore(raw: Store): Store {
     if (payment.installment !== 1 && payment.installment !== 2 && payment.installment !== 3 && payment.installment !== 4) {
       payment.installment = 1;
     }
+    payment.paymentMethod ??= null;
+    payment.paymentReference ??= null;
   }
+  for (const bill of raw.utilityBills) {
+    bill.paymentMethod ??= null;
+    bill.paymentReference ??= null;
+  }
+  raw.platformPaymentSettings ??= defaultPlatformPaymentSettings();
   return raw;
 }
 
@@ -305,6 +331,126 @@ function randomLast4() {
 
 export function listLandlordsPublic() {
   return store.landlords.map((l) => ({ id: l.id, name: l.name }));
+}
+
+export function getPlatformPaymentSettings() {
+  return store.platformPaymentSettings;
+}
+
+export function getPublicPaymentOptions() {
+  const settings = store.platformPaymentSettings;
+  const creditCardReady = Boolean(
+    settings.bankName && settings.accountHolderName && settings.routingNumber && settings.accountNumber,
+  );
+  const cashAppReady = Boolean(settings.cashAppCashtag.trim());
+
+  return {
+    creditCardEnabled: settings.creditCardEnabled && creditCardReady,
+    cashAppEnabled: settings.cashAppEnabled && cashAppReady,
+    cashAppCashtag: settings.cashAppCashtag.startsWith("$")
+      ? settings.cashAppCashtag
+      : settings.cashAppCashtag
+        ? `$${settings.cashAppCashtag.replace(/^\$/, "")}`
+        : "",
+    businessName: settings.businessName,
+    configured: Boolean(settings.configuredAt),
+  };
+}
+
+export function updatePlatformPaymentSettings(input: Partial<PlatformPaymentSettings>) {
+  const current = store.platformPaymentSettings;
+  const next: PlatformPaymentSettings = {
+    businessName: input.businessName?.trim() || current.businessName,
+    bankName: input.bankName?.trim() ?? current.bankName,
+    accountHolderName: input.accountHolderName?.trim() ?? current.accountHolderName,
+    routingNumber: input.routingNumber?.replace(/\D/g, "") ?? current.routingNumber,
+    accountNumber: input.accountNumber?.replace(/\D/g, "") ?? current.accountNumber,
+    cashAppCashtag: (input.cashAppCashtag ?? current.cashAppCashtag).trim().replace(/^\$/, ""),
+    creditCardEnabled: input.creditCardEnabled ?? current.creditCardEnabled,
+    cashAppEnabled: input.cashAppEnabled ?? current.cashAppEnabled,
+    configuredAt: new Date().toISOString(),
+  };
+
+  store.platformPaymentSettings = next;
+  addActivity("Platform payment receiving settings updated.", "admin");
+  persist();
+  return next;
+}
+
+export function validatePaymentMethod(method: PaymentMethodType) {
+  const options = getPublicPaymentOptions();
+  if (method === "credit_card" && !options.creditCardEnabled) {
+    throw new Error("Credit card payments are not available. Ask the admin to configure bank deposit details.");
+  }
+  if (method === "cash_app" && !options.cashAppEnabled) {
+    throw new Error("Cash App payments are not available. Ask the admin to configure a Cash App cashtag.");
+  }
+}
+
+export function validateCreditCardInput(input: {
+  cardNumber?: string;
+  expiry?: string;
+  cvc?: string;
+  nameOnCard?: string;
+}) {
+  const cardNumber = input.cardNumber?.replace(/\D/g, "") ?? "";
+  const expiry = input.expiry?.trim() ?? "";
+  const cvc = input.cvc?.replace(/\D/g, "") ?? "";
+  const nameOnCard = input.nameOnCard?.trim() ?? "";
+
+  if (!nameOnCard) throw new Error("Name on card is required");
+  if (cardNumber.length < 13 || cardNumber.length > 19) throw new Error("Enter a valid card number");
+  if (!/^\d{2}\/\d{2}$/.test(expiry)) throw new Error("Expiry must be MM/YY");
+  if (cvc.length < 3 || cvc.length > 4) throw new Error("Enter a valid security code");
+
+  return {
+    reference: `••••${cardNumber.slice(-4)}`,
+  };
+}
+
+function completeRentPayment(paymentId: string, method: PaymentMethodType, reference: string) {
+  const payment = store.payments.find((p) => p.id === paymentId);
+  if (!payment) return;
+
+  payment.status = "paid";
+  payment.paidAt = new Date().toISOString();
+  payment.paymentMethod = method;
+  payment.paymentReference = reference;
+
+  const tenant = findTenant(payment.tenantId);
+  if (payment.installment === 1 && tenant) {
+    const payout = store.payouts.find((x) => x.tenantId === tenant.id && x.status === "pending");
+    if (payout) payout.status = "completed";
+    addActivity(
+      `The Unleashed paid ${tenant.landlordId ? findLandlord(tenant.landlordId)?.name : "landlord"} $${tenant.monthlyRent} in full for ${tenant.name}.`,
+      "tenant",
+    );
+  }
+
+  const methodLabel = method === "credit_card" ? "credit card" : "Cash App";
+  addActivity(
+    `${tenant?.name ?? "Tenant"} paid ${payment.label} ($${payment.amount}) via ${methodLabel} (${reference}).`,
+    "tenant",
+  );
+  persist();
+}
+
+function completeUtilityPayment(billId: string, method: PaymentMethodType, reference: string) {
+  const bill = store.utilityBills.find((b) => b.id === billId);
+  if (!bill) return;
+
+  bill.status = "paid";
+  bill.paidAt = new Date().toISOString();
+  bill.paymentMethod = method;
+  bill.paymentReference = reference;
+
+  const tenant = findTenant(bill.tenantId);
+  const methodLabel = method === "credit_card" ? "credit card" : "Cash App";
+  addActivity(
+    `${tenant?.name ?? "Tenant"} paid ${bill.provider} bill ($${bill.amount}) via ${methodLabel} (${reference}).`,
+    "tenant",
+  );
+  persist();
 }
 
 export function createLandlordAccount(input: { name: string; email: string }) {
@@ -561,6 +707,8 @@ export function createUtilityBill(
     status: "pending",
     paidAt: null,
     submittedAt: new Date().toISOString(),
+    paymentMethod: null,
+    paymentReference: null,
   };
 
   store.utilityBills.push(bill);
@@ -569,28 +717,42 @@ export function createUtilityBill(
   return bill;
 }
 
-export function payUtilityBill(tenantId: string, billId: string) {
+export function payUtilityBill(
+  tenantId: string,
+  billId: string,
+  method: PaymentMethodType,
+  reference: string,
+) {
   const bill = store.utilityBills.find((b) => b.id === billId && b.tenantId === tenantId);
   if (!bill) throw new Error("Bill not found");
   if (bill.status === "paid") throw new Error("Bill already paid");
 
+  validatePaymentMethod(method);
   bill.status = "processing";
   persist();
 
-  setTimeout(() => {
-    const current = store.utilityBills.find((b) => b.id === billId);
-    if (!current) return;
-    current.status = "paid";
-    current.paidAt = new Date().toISOString();
-    const tenant = findTenant(tenantId);
-    addActivity(
-      `${tenant?.name ?? "Tenant"} paid ${current.provider} bill ($${current.amount}).`,
-      "tenant",
-    );
-    persist();
-  }, 1200);
+  setTimeout(() => completeUtilityPayment(billId, method, reference), 1200);
 
   return bill;
+}
+
+export function payRentInstallment(
+  tenantId: string,
+  paymentId: string,
+  method: PaymentMethodType,
+  reference: string,
+) {
+  const payment = store.payments.find((p) => p.id === paymentId && p.tenantId === tenantId);
+  if (!payment) throw new Error("Payment not found");
+  if (payment.status === "paid") throw new Error("Payment already completed");
+
+  validatePaymentMethod(method);
+  payment.status = "processing";
+  persist();
+
+  setTimeout(() => completeRentPayment(paymentId, method, reference), 1200);
+
+  return payment;
 }
 
 export function ensureUploadsDir() {

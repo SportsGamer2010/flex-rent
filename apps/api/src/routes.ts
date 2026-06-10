@@ -13,17 +13,22 @@ import {
   findLandlord,
   findTenant,
   findUserByEmail,
+  getPlatformPaymentSettings,
+  getPublicPaymentOptions,
   getStore,
   listLandlordsPublic,
+  payRentInstallment,
   payUtilityBill,
   persist,
   resetStore,
   runCreditCheck,
   submitRentalHistory,
   submitTenantProperty,
+  updatePlatformPaymentSettings,
+  validateCreditCardInput,
   UPLOADS_DIR,
 } from "./store.js";
-import type { UserRole } from "./types.js";
+import type { PaymentMethodType, UserRole } from "./types.js";
 
 const router = Router();
 
@@ -76,6 +81,33 @@ function tenantFees(tenant: {
 
 router.get("/health", (_req, res) => {
   res.json({ ok: true, service: "the-unleashed-api", mode: "demo" });
+});
+
+router.get("/public/payment-options", (_req, res) => {
+  res.json(getPublicPaymentOptions());
+});
+
+router.get("/public/admin/payment-settings", (_req, res) => {
+  res.json({ settings: getPlatformPaymentSettings() });
+});
+
+router.put("/public/admin/payment-settings", (req, res) => {
+  try {
+    const body = req.body as {
+      businessName?: string;
+      bankName?: string;
+      accountHolderName?: string;
+      routingNumber?: string;
+      accountNumber?: string;
+      cashAppCashtag?: string;
+      creditCardEnabled?: boolean;
+      cashAppEnabled?: boolean;
+    };
+    const settings = updatePlatformPaymentSettings(body);
+    res.json({ ok: true, settings, message: "Payment receiving settings saved." });
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "Failed to save settings" });
+  }
 });
 
 router.get("/public/landlords", (_req, res) => {
@@ -358,49 +390,34 @@ router.post("/tenant/payments/:id/pay", (req, res) => {
     return;
   }
 
-  const store = getStore();
-  const payment = store.payments.find(
-    (p) => p.id === req.params.id && p.tenantId === auth.user.tenantId,
-  );
-  if (!payment) {
-    res.status(404).json({ error: "Payment not found" });
+  const { method, cardNumber, expiry, cvc, nameOnCard } = req.body as {
+    method?: PaymentMethodType;
+    cardNumber?: string;
+    expiry?: string;
+    cvc?: string;
+    nameOnCard?: string;
+  };
+
+  if (method !== "credit_card" && method !== "cash_app") {
+    res.status(400).json({ error: "Choose credit card or Cash App to pay." });
     return;
   }
-  if (payment.status === "paid") {
-    res.status(400).json({ error: "Payment already completed" });
-    return;
-  }
 
-  payment.status = "processing";
-  persist();
-
-  setTimeout(() => {
-    const s = getStore();
-    const p = s.payments.find((x) => x.id === payment.id);
-    if (!p) return;
-    p.status = "paid";
-    p.paidAt = new Date().toISOString();
-
-    const tenant = findTenant(p.tenantId);
-    if (p.installment === 1 && tenant) {
-      const payout = s.payouts.find(
-        (x) => x.tenantId === tenant.id && x.status === "pending",
-      );
-      if (payout) payout.status = "completed";
-      addActivity(
-        `The Unleashed paid ${tenant.landlordId ? findLandlord(tenant.landlordId)?.name : "landlord"} $${tenant.monthlyRent} in full for ${tenant.name}.`,
-        "tenant",
-      );
+  try {
+    let reference = "";
+    if (method === "credit_card") {
+      ({ reference } = validateCreditCardInput({ cardNumber, expiry, cvc, nameOnCard }));
+    } else {
+      const options = getPublicPaymentOptions();
+      reference = options.cashAppCashtag;
     }
 
-    addActivity(
-      `${tenant?.name ?? "Tenant"} paid ${p.label} ($${p.amount}).`,
-      "tenant",
-    );
-    persist();
-  }, 1200);
-
-  res.json({ ok: true, payment, message: "Processing payment…" });
+    const payment = payRentInstallment(auth.user.tenantId!, req.params.id, method, reference);
+    const methodLabel = method === "credit_card" ? "Credit card" : "Cash App";
+    res.json({ ok: true, payment, message: `${methodLabel} payment processing…` });
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "Payment failed" });
+  }
 });
 
 router.get("/tenant/utility-bills", (req, res) => {
@@ -459,9 +476,31 @@ router.post("/tenant/utility-bills/:id/pay", (req, res) => {
     return;
   }
 
+  const { method, cardNumber, expiry, cvc, nameOnCard } = req.body as {
+    method?: PaymentMethodType;
+    cardNumber?: string;
+    expiry?: string;
+    cvc?: string;
+    nameOnCard?: string;
+  };
+
+  if (method !== "credit_card" && method !== "cash_app") {
+    res.status(400).json({ error: "Choose credit card or Cash App to pay." });
+    return;
+  }
+
   try {
-    const bill = payUtilityBill(auth.user.tenantId!, req.params.id);
-    res.json({ ok: true, bill, message: "Processing utility bill payment…" });
+    let reference = "";
+    if (method === "credit_card") {
+      ({ reference } = validateCreditCardInput({ cardNumber, expiry, cvc, nameOnCard }));
+    } else {
+      const options = getPublicPaymentOptions();
+      reference = options.cashAppCashtag;
+    }
+
+    const bill = payUtilityBill(auth.user.tenantId!, req.params.id, method, reference);
+    const methodLabel = method === "credit_card" ? "Credit card" : "Cash App";
+    res.json({ ok: true, bill, message: `${methodLabel} payment processing…` });
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : "Payment failed" });
   }

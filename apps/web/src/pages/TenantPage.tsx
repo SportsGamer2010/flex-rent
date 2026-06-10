@@ -1,6 +1,7 @@
 import { CheckCircle2, CreditCard } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Card, RiskBadge, StatCard } from "../components/Card";
+import { PaymentMethodModal } from "../components/PaymentMethodModal";
 import { StatusBadge } from "../components/StatusBadge";
 import { UtilityBillSection } from "../components/UtilityBillSection";
 import TenantOnboardingPage from "../pages/TenantOnboardingPage";
@@ -12,6 +13,11 @@ export default function TenantPage() {
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [loading, setLoading] = useState(true);
   const [payingId, setPayingId] = useState<string | null>(null);
+  const [paymentTarget, setPaymentTarget] = useState<{
+    id: string;
+    label: string;
+    amount: number;
+  } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -33,15 +39,23 @@ export default function TenantPage() {
     load().finally(() => setLoading(false));
   }, [load]);
 
-  async function handlePay(paymentId: string) {
-    setPayingId(paymentId);
+  async function handlePaySubmit(payload: {
+    method: "credit_card" | "cash_app";
+    cardNumber?: string;
+    expiry?: string;
+    cvc?: string;
+    nameOnCard?: string;
+  }) {
+    if (!paymentTarget) return;
+    setPayingId(paymentTarget.id);
     setMessage(null);
     try {
-      const res = await api.payInstallment(paymentId);
+      const res = await api.payInstallment(paymentTarget.id, payload);
       setMessage(res.message);
+      setPaymentTarget(null);
       setTimeout(() => load(), 1500);
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Payment failed");
+      throw e;
     } finally {
       setPayingId(null);
     }
@@ -119,7 +133,13 @@ export default function TenantPage() {
                 <StatusBadge status={payment.status} />
                 {payment.status === "scheduled" && (
                   <button
-                    onClick={() => handlePay(payment.id)}
+                    onClick={() =>
+                      setPaymentTarget({
+                        id: payment.id,
+                        label: payment.label,
+                        amount: payment.amount,
+                      })
+                    }
                     disabled={payingId === payment.id}
                     className="btn-gold px-3 py-2 text-xs"
                   >
@@ -134,6 +154,15 @@ export default function TenantPage() {
       </Card>
 
       <UtilityBillSection bills={utilityBills} onUpdate={load} />
+
+      <PaymentMethodModal
+        open={paymentTarget !== null}
+        title={paymentTarget?.label ?? "Pay installment"}
+        amount={paymentTarget?.amount ?? 0}
+        fee={fees.perPayment}
+        onClose={() => setPaymentTarget(null)}
+        onSubmit={handlePaySubmit}
+      />
 
       <Card title="How it works this month">
         <div className="grid gap-4 sm:grid-cols-3">

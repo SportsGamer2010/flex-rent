@@ -2,6 +2,7 @@ const TOKEN_KEY = "unleashed_demo_token";
 
 export type UserRole = "tenant" | "landlord" | "admin";
 export type RiskTier = "low" | "medium" | "high";
+export type PaymentMethodType = "credit_card" | "cash_app";
 
 export interface User {
   id: string;
@@ -49,6 +50,18 @@ export const api = {
   },
   listLandlords() {
     return request<{ landlords: Array<{ id: string; name: string }> }>("/api/public/landlords");
+  },
+  paymentOptions() {
+    return request<PublicPaymentOptions>("/api/public/payment-options");
+  },
+  adminPaymentSettings() {
+    return request<{ settings: PlatformPaymentSettings }>("/api/public/admin/payment-settings");
+  },
+  saveAdminPaymentSettings(settings: PlatformPaymentSettings) {
+    return request<{ ok: boolean; settings: PlatformPaymentSettings; message: string }>(
+      "/api/public/admin/payment-settings",
+      { method: "PUT", body: JSON.stringify(settings) },
+    );
   },
   registerLandlord(name: string, email: string) {
     return request<{ token: string; user: User }>("/api/auth/register-landlord", {
@@ -102,9 +115,19 @@ export const api = {
   tenantDashboard() {
     return request<TenantDashboard>("/api/tenant/dashboard");
   },
-  payInstallment(paymentId: string) {
+  payInstallment(
+    paymentId: string,
+    payload: {
+      method: PaymentMethodType;
+      cardNumber?: string;
+      expiry?: string;
+      cvc?: string;
+      nameOnCard?: string;
+    },
+  ) {
     return request<{ ok: boolean; message: string }>(`/api/tenant/payments/${paymentId}/pay`, {
       method: "POST",
+      body: JSON.stringify(payload),
     });
   },
   uploadUtilityBill(formData: FormData) {
@@ -113,9 +136,19 @@ export const api = {
       body: formData,
     });
   },
-  payUtilityBill(billId: string) {
+  payUtilityBill(
+    billId: string,
+    payload: {
+      method: PaymentMethodType;
+      cardNumber?: string;
+      expiry?: string;
+      cvc?: string;
+      nameOnCard?: string;
+    },
+  ) {
     return request<{ ok: boolean; message: string }>(`/api/tenant/utility-bills/${billId}/pay`, {
       method: "POST",
+      body: JSON.stringify(payload),
     });
   },
   landlordDashboard() {
@@ -256,6 +289,26 @@ export interface LandlordDashboard {
     totalMonthlyRent: number;
     onTimePayoutRate: number;
   };
+}
+
+export interface PublicPaymentOptions {
+  creditCardEnabled: boolean;
+  cashAppEnabled: boolean;
+  cashAppCashtag: string;
+  businessName: string;
+  configured: boolean;
+}
+
+export interface PlatformPaymentSettings {
+  businessName: string;
+  bankName: string;
+  accountHolderName: string;
+  routingNumber: string;
+  accountNumber: string;
+  cashAppCashtag: string;
+  creditCardEnabled: boolean;
+  cashAppEnabled: boolean;
+  configuredAt: string | null;
 }
 
 export interface AdminOverview {

@@ -2,6 +2,8 @@ export type UserRole = "tenant" | "landlord" | "admin";
 
 export type PaymentStatus = "scheduled" | "paid" | "failed" | "processing";
 
+export type PaymentMethodType = "credit_card" | "cash_app";
+
 export type RiskTier = "low" | "medium" | "high";
 
 export type UtilityBillStatus = "pending" | "paid" | "processing";
@@ -82,6 +84,8 @@ export interface UtilityBill {
   status: UtilityBillStatus;
   paidAt: string | null;
   submittedAt: string;
+  paymentMethod: PaymentMethodType | null;
+  paymentReference: string | null;
 }
 
 export interface Payment {
@@ -93,6 +97,20 @@ export interface Payment {
   status: PaymentStatus;
   paidAt: string | null;
   installment: 1 | 2 | 3 | 4;
+  paymentMethod: PaymentMethodType | null;
+  paymentReference: string | null;
+}
+
+export interface PlatformPaymentSettings {
+  businessName: string;
+  bankName: string;
+  accountHolderName: string;
+  routingNumber: string;
+  accountNumber: string;
+  cashAppCashtag: string;
+  creditCardEnabled: boolean;
+  cashAppEnabled: boolean;
+  configuredAt: string | null;
 }
 
 export interface LandlordPayout {
@@ -124,4 +142,5 @@ export interface Store {
   utilityBills: UtilityBill[];
   activity: Activity[];
   sessions: Record<string, string>;
+  platformPaymentSettings: PlatformPaymentSettings;
 }

@@ -1,6 +1,7 @@
 import { CreditCard, FileUp, Zap } from "lucide-react";
 import { useState } from "react";
 import { Card } from "../components/Card";
+import { PaymentMethodModal } from "../components/PaymentMethodModal";
 import { StatusBadge } from "../components/StatusBadge";
 import { api, type UtilityBill } from "../lib/api";
 import { formatDate, money } from "../lib/format";
@@ -14,6 +15,11 @@ export function UtilityBillSection({
 }) {
   const [uploading, setUploading] = useState(false);
   const [payingId, setPayingId] = useState<string | null>(null);
+  const [paymentTarget, setPaymentTarget] = useState<{
+    id: string;
+    label: string;
+    amount: number;
+  } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -49,15 +55,23 @@ export function UtilityBillSection({
     }
   }
 
-  async function handlePay(billId: string) {
-    setPayingId(billId);
+  async function handlePaySubmit(payload: {
+    method: "credit_card" | "cash_app";
+    cardNumber?: string;
+    expiry?: string;
+    cvc?: string;
+    nameOnCard?: string;
+  }) {
+    if (!paymentTarget) return;
+    setPayingId(paymentTarget.id);
     setError(null);
     try {
-      const res = await api.payUtilityBill(billId);
+      const res = await api.payUtilityBill(paymentTarget.id, payload);
       setMessage(res.message);
+      setPaymentTarget(null);
       setTimeout(onUpdate, 1500);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Payment failed");
+    } catch (e) {
+      throw e;
     } finally {
       setPayingId(null);
     }
@@ -152,7 +166,13 @@ export function UtilityBillSection({
               <StatusBadge status={bill.status} />
               {bill.status === "pending" && (
                 <button
-                  onClick={() => handlePay(bill.id)}
+                  onClick={() =>
+                    setPaymentTarget({
+                      id: bill.id,
+                      label: `${bill.provider} utility bill`,
+                      amount: bill.amount,
+                    })
+                  }
                   disabled={payingId === bill.id}
                   className="btn-gold px-3 py-2 text-xs"
                 >
@@ -164,6 +184,14 @@ export function UtilityBillSection({
           </div>
         ))}
       </div>
+
+      <PaymentMethodModal
+        open={paymentTarget !== null}
+        title={paymentTarget?.label ?? "Pay utility bill"}
+        amount={paymentTarget?.amount ?? 0}
+        onClose={() => setPaymentTarget(null)}
+        onSubmit={handlePaySubmit}
+      />
     </Card>
   );
 }

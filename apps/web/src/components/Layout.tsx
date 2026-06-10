@@ -16,11 +16,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen bg-black">
         <header className="border-b border-brand-600/20 bg-black/95 backdrop-blur-xl">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:py-5">
             <HeaderLogo to="/" />
-            <Link to="/login" className="btn-outline-gold text-sm">
-              Sign in
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link to="/admin/settings" className="text-sm text-neutral-400 transition hover:text-brand-200">
+                Admin settings
+              </Link>
+              <Link to="/login" className="btn-outline-gold text-sm">
+                Sign in
+              </Link>
+            </div>
           </div>
         </header>
         {children}
@@ -33,7 +38,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-black">
       <header className="sticky top-0 z-50 border-b border-brand-600/20 bg-black/95 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3.5 sm:py-4">
           <HeaderLogo to="/app" />
           <nav className="hidden items-center gap-1 md:flex">
             {nav.map((item) => (

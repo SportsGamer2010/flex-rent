@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { useAuth } from "./context/AuthContext";
 import AdminPage from "./pages/AdminPage";
+import AdminSettingsPage from "./pages/AdminSettingsPage";
 import HomePage from "./pages/HomePage";
 import LandlordPage from "./pages/LandlordPage";
 import LoginPage from "./pages/LoginPage";
@@ -29,6 +30,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/admin/settings" element={<AdminSettingsPage />} />
         <Route path="/app" element={<ProtectedApp />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

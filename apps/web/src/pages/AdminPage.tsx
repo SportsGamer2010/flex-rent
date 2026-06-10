@@ -1,5 +1,6 @@
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, Settings } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Card, StatCard } from "../components/Card";
 import { api, type AdminOverview } from "../lib/api";
 import { formatDateTime, money } from "../lib/format";
@@ -42,14 +43,20 @@ export default function AdminPage() {
           <h1 className="text-3xl font-bold text-brand-100">Platform overview</h1>
           <p className="mt-1 text-neutral-400">The Unleashed admin console</p>
         </div>
-        <button
-          onClick={handleReset}
-          disabled={resetting}
-          className="btn-outline-gold"
-        >
-          <RotateCcw className={`h-4 w-4 ${resetting ? "animate-spin" : ""}`} />
-          Reset demo data
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <Link to="/admin/settings" className="btn-outline-gold">
+            <Settings className="h-4 w-4" />
+            Payment settings
+          </Link>
+          <button
+            onClick={handleReset}
+            disabled={resetting}
+            className="btn-outline-gold"
+          >
+            <RotateCcw className={`h-4 w-4 ${resetting ? "animate-spin" : ""}`} />
+            Reset demo data
+          </button>
+        </div>
       </div>
 
       {message && (

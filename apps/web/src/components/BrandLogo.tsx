@@ -1,13 +1,13 @@
 import { Link } from "react-router-dom";
-import { APP_DOMAIN, APP_TAGLINE, LOGO_PATH } from "../lib/brand";
+import { APP_DOMAIN, APP_TAGLINE, LOGO_MARK_PATH, LOGO_PATH } from "../lib/brand";
 
 type LogoSize = "sm" | "md" | "lg" | "hero";
 
 const imageHeights: Record<LogoSize, string> = {
-  sm: "h-8",
-  md: "h-12",
-  lg: "h-20",
-  hero: "h-40 sm:h-52",
+  sm: "h-12",
+  md: "h-16",
+  lg: "h-28 sm:h-32",
+  hero: "h-44 sm:h-56",
 };
 
 export function BrandLogo({
@@ -23,7 +23,8 @@ export function BrandLogo({
     <img
       src={LOGO_PATH}
       alt={APP_DOMAIN}
-      className={`${imageHeights[size]} w-auto object-contain ${className}`}
+      className={`${imageHeights[size]} w-auto max-w-full object-contain [image-rendering:auto] ${className}`}
+      decoding="async"
     />
   );
 
@@ -62,8 +63,20 @@ export function BrandTagline({ className = "" }: { className?: string }) {
 
 export function HeaderLogo({ to = "/" }: { to?: string }) {
   return (
-    <Link to={to} className="group inline-flex items-center transition hover:opacity-95">
-      <img src={LOGO_PATH} alt={APP_DOMAIN} className="h-10 w-auto object-contain sm:h-11" />
+    <Link
+      to={to}
+      className="group inline-flex min-w-0 items-center gap-3 transition hover:opacity-95 sm:gap-3.5"
+    >
+      <img
+        src={LOGO_MARK_PATH}
+        alt=""
+        aria-hidden
+        width={262}
+        height={175}
+        decoding="async"
+        className="h-12 w-auto shrink-0 object-contain drop-shadow-[0_0_14px_rgba(212,175,55,0.3)] sm:h-14 md:h-16"
+      />
+      <Wordmark className="truncate text-base leading-none sm:text-lg md:text-xl" />
     </Link>
   );
 }
