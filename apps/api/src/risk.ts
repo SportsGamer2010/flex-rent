@@ -39,3 +39,53 @@ export function riskTierLabel(risk: RiskTier): string {
   if (risk === "medium") return "Medium risk";
   return "Low risk";
 }
+
+export const LANDLORD_FEE_PER_PAYMENT = 50;
+export const SOFT_CREDIT_CHECK_FEE = 5;
+
+/** High risk (2 payments): $10/payment. Low/medium (4 payments): $5/payment. Total $20/mo either way. */
+export function feePerPayment(riskTier: RiskTier | null, splitCount: 2 | 4): number {
+  if (riskTier === "high" || splitCount === 2) return 10;
+  return 5;
+}
+
+export function tenantPaymentFees(tenant: {
+  riskTier: RiskTier | null;
+  splitCount: 2 | 4;
+  creditCheckComplete: boolean;
+}) {
+  const perPayment = feePerPayment(tenant.riskTier, tenant.splitCount);
+  const paymentCount = tenant.splitCount;
+  const creditCheckFee = tenant.creditCheckComplete ? SOFT_CREDIT_CHECK_FEE : 0;
+  const monthlyPaymentFees = perPayment * paymentCount;
+  return {
+    creditCheckFee,
+    perPayment,
+    paymentCount,
+    monthlyPaymentFees,
+    total: creditCheckFee + monthlyPaymentFees,
+  };
+}
+
+export function landlordTenantFees(tenant: { enrolled: boolean; onboardingComplete: boolean; splitCount: 2 | 4 }) {
+  if (!tenant.enrolled || !tenant.onboardingComplete) {
+    return { perPayment: LANDLORD_FEE_PER_PAYMENT, paymentCount: 0, total: 0 };
+  }
+  return {
+    perPayment: LANDLORD_FEE_PER_PAYMENT,
+    paymentCount: tenant.splitCount,
+    total: LANDLORD_FEE_PER_PAYMENT * tenant.splitCount,
+  };
+}
+
+export function landlordPortfolioFees(
+  tenants: Array<{ enrolled: boolean; onboardingComplete: boolean; splitCount: 2 | 4 }>,
+) {
+  const enrolled = tenants.filter((t) => t.enrolled && t.onboardingComplete);
+  const totalPayments = enrolled.reduce((sum, t) => sum + t.splitCount, 0);
+  return {
+    perPayment: LANDLORD_FEE_PER_PAYMENT,
+    totalPayments,
+    monthlyTotal: LANDLORD_FEE_PER_PAYMENT * totalPayments,
+  };
+}

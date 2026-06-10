@@ -14,13 +14,7 @@ interface AuthContextValue {
   loading: boolean;
   login: (role: UserRole, email?: string) => Promise<void>;
   registerLandlord: (name: string, email: string) => Promise<void>;
-  registerTenant: (input: {
-    name: string;
-    email: string;
-    landlordId: string;
-    unit: string;
-    monthlyRent: number;
-  }) => Promise<void>;
+  registerTenant: (input: { name: string; email: string }) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -63,13 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const registerTenant = useCallback(
-    async (input: {
-      name: string;
-      email: string;
-      landlordId: string;
-      unit: string;
-      monthlyRent: number;
-    }) => {
+    async (input: { name: string; email: string }) => {
       applySession(await api.registerTenant(input));
     },
     [applySession],

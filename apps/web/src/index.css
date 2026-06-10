@@ -1,8 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Georgia", "Times New Roman", "Segoe UI", system-ui, serif;
-  --font-display: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-display: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   --color-brand-50: #fefce8;
   --color-brand-100: #fef9c3;
   --color-brand-200: #fde68a;
@@ -13,18 +12,18 @@
   --color-brand-700: #92700a;
   --color-brand-800: #78590a;
   --color-brand-900: #422006;
-  --color-surface-900: #0a0a0a;
-  --color-surface-800: #141414;
-  --color-surface-700: #1a1a1a;
+  --color-surface-900: #000000;
+  --color-surface-800: #0a0a0a;
+  --color-surface-700: #141414;
 }
 
 body {
-  @apply bg-surface-900 text-neutral-100 antialiased;
+  @apply bg-black text-neutral-100 antialiased;
   font-family: var(--font-display);
 }
 
-.font-serif-display {
-  font-family: var(--font-sans);
+.font-display {
+  font-family: var(--font-display);
 }
 
 .gold-gradient-text {

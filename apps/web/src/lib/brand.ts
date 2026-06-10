@@ -1,2 +1,7 @@
-export const APP_NAME = "FlexRent";
-export const APP_TAGLINE = "Flexible rent for your properties";
+export const APP_NAME = "theunleashed.org";
+export const APP_SHORT_NAME = "The Unleashed";
+export const APP_TAGLINE = "SPLIT. PAY. UNLEASH.";
+export const APP_DOMAIN = "theunleashed.org";
+export const LOGO_PATH = "/logo.png";
+export const LANDLORD_FEE_PER_PAYMENT = 50;
+export const SOFT_CREDIT_CHECK_FEE = 5;

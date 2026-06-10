@@ -3,7 +3,7 @@ import path from "node:path";
 import { Router } from "express";
 import multer from "multer";
 import { v4 as uuid } from "uuid";
-import { riskTierLabel } from "./risk.js";
+import { landlordPortfolioFees, landlordTenantFees, riskTierLabel, SOFT_CREDIT_CHECK_FEE, tenantPaymentFees } from "./risk.js";
 import {
   addActivity,
   createLandlordAccount,
@@ -20,6 +20,7 @@ import {
   resetStore,
   runCreditCheck,
   submitRentalHistory,
+  submitTenantProperty,
   UPLOADS_DIR,
 } from "./store.js";
 import type { UserRole } from "./types.js";
@@ -65,17 +66,16 @@ function requireAuth(
   return { user };
 }
 
-function tenantFees(tenant: { monthlyRent: number; membershipFee: number; billFeePercent: number }) {
-  const billFee = Math.round(tenant.monthlyRent * (tenant.billFeePercent / 100) * 100) / 100;
-  return {
-    membershipFee: tenant.membershipFee,
-    billFee,
-    total: Math.round((tenant.membershipFee + billFee) * 100) / 100,
-  };
+function tenantFees(tenant: {
+  riskTier: import("./types.js").RiskTier | null;
+  splitCount: 2 | 4;
+  creditCheckComplete: boolean;
+}) {
+  return tenantPaymentFees(tenant);
 }
 
 router.get("/health", (_req, res) => {
-  res.json({ ok: true, service: "flexrent-api", mode: "demo" });
+  res.json({ ok: true, service: "the-unleashed-api", mode: "demo" });
 });
 
 router.get("/public/landlords", (_req, res) => {
@@ -97,25 +97,9 @@ router.post("/auth/register-landlord", (req, res) => {
 });
 
 router.post("/auth/register-tenant", (req, res) => {
-  const { name, email, landlordId, unit, monthlyRent } = req.body as {
-    name?: string;
-    email?: string;
-    landlordId?: string;
-    unit?: string;
-    monthlyRent?: number;
-  };
-  if (!landlordId) {
-    res.status(400).json({ error: "Landlord is required" });
-    return;
-  }
+  const { name, email } = req.body as { name?: string; email?: string };
   try {
-    const { user } = createTenantAccount({
-      name: name ?? "",
-      email: email ?? "",
-      landlordId,
-      unit: unit ?? "",
-      monthlyRent: Number(monthlyRent),
-    });
+    const { user } = createTenantAccount({ name: name ?? "", email: email ?? "" });
     const token = uuid();
     const store = getStore();
     store.sessions[token] = user.id;
@@ -182,17 +166,49 @@ router.get("/tenant/onboarding", (req, res) => {
 
   const creditCheck = store.creditChecks.find((c) => c.tenantId === tenant.id) ?? null;
   const rentalHistory = store.rentalHistory.find((r) => r.tenantId === tenant.id) ?? null;
+  const landlord = tenant.landlordId ? findLandlord(tenant.landlordId) : null;
 
   res.json({
     tenant,
+    landlord,
     creditCheck,
     rentalHistory,
+    landlords: listLandlordsPublic(),
+    creditCheckFee: SOFT_CREDIT_CHECK_FEE,
     steps: {
+      property: tenant.propertySetupComplete,
       creditCheck: tenant.creditCheckComplete,
       rentalHistory: tenant.rentalHistoryComplete,
       complete: tenant.onboardingComplete,
     },
   });
+});
+
+router.post("/tenant/property", (req, res) => {
+  const auth = requireAuth(req, ["tenant"]);
+  if ("error" in auth) {
+    res.status(auth.status).json({ error: auth.error });
+    return;
+  }
+
+  const { landlordId, unit, propertyAddress, monthlyRent } = req.body as {
+    landlordId?: string;
+    unit?: string;
+    propertyAddress?: string;
+    monthlyRent?: number;
+  };
+
+  try {
+    const result = submitTenantProperty(auth.user.tenantId!, {
+      landlordId: landlordId ?? "",
+      unit: unit ?? "",
+      propertyAddress: propertyAddress ?? "",
+      monthlyRent: Number(monthlyRent),
+    });
+    res.json(result);
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "Property setup failed" });
+  }
 });
 
 router.post("/tenant/credit-check", (req, res) => {
@@ -227,7 +243,7 @@ router.post("/tenant/credit-check", (req, res) => {
     });
     res.json({
       ...result,
-      message: `Soft credit check complete. ${riskTierLabel(result.check.riskTier)} — rent split into ${result.tenant.splitCount} payments.`,
+      message: `Soft credit check complete ($${SOFT_CREDIT_CHECK_FEE} fee). ${riskTierLabel(result.check.riskTier)} — rent split into ${result.tenant.splitCount} payments.`,
     });
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : "Credit check failed" });
@@ -372,7 +388,7 @@ router.post("/tenant/payments/:id/pay", (req, res) => {
       );
       if (payout) payout.status = "completed";
       addActivity(
-        `FlexRent paid ${tenant.landlordId ? findLandlord(tenant.landlordId)?.name : "landlord"} $${tenant.monthlyRent} in full for ${tenant.name}.`,
+        `The Unleashed paid ${tenant.landlordId ? findLandlord(tenant.landlordId)?.name : "landlord"} $${tenant.monthlyRent} in full for ${tenant.name}.`,
         "tenant",
       );
     }
@@ -467,11 +483,17 @@ router.get("/landlord/dashboard", (req, res) => {
 
   const tenants = store.tenants.filter((t) => t.landlordId === landlord.id);
   const payouts = store.payouts.filter((p) => p.landlordId === landlord.id);
+  const fees = landlordPortfolioFees(tenants);
+  const tenantsWithFees = tenants.map((t) => ({
+    ...t,
+    fees: landlordTenantFees(t),
+  }));
 
   res.json({
     landlord,
-    tenants,
+    tenants: tenantsWithFees,
     payouts,
+    fees,
     stats: {
       enrolledTenants: tenants.filter((t) => t.enrolled).length,
       pendingOnboarding: tenants.filter((t) => !t.onboardingComplete).length,

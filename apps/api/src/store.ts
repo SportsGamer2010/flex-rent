@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { v4 as uuid } from "uuid";
-import { mockCreditScore, riskTierToSplitCount, scoreToRiskTier } from "./risk.js";
+import { mockCreditScore, riskTierToSplitCount, scoreToRiskTier, SOFT_CREDIT_CHECK_FEE } from "./risk.js";
 import type {
   Activity,
   CreditCheck,
@@ -83,6 +83,7 @@ function seedStore(): Store {
     email: "jane@demo.com",
     landlordId,
     unit: "4B",
+    propertyAddress: "100 Sunset Blvd, Austin, TX",
     monthlyRent: rent,
     rentDueDay: dueDay,
     bankLast4: "9034",
@@ -93,6 +94,7 @@ function seedStore(): Store {
     riskTier: "low",
     creditScore: 742,
     splitCount: 4,
+    propertySetupComplete: true,
     creditCheckComplete: true,
     rentalHistoryComplete: true,
     onboardingComplete: true,
@@ -104,6 +106,7 @@ function seedStore(): Store {
     email: "marcus@demo.com",
     landlordId,
     unit: "2A",
+    propertyAddress: "100 Sunset Blvd, Austin, TX",
     monthlyRent: 1600,
     rentDueDay: dueDay,
     bankLast4: "7712",
@@ -114,6 +117,7 @@ function seedStore(): Store {
     riskTier: "high",
     creditScore: 598,
     splitCount: 2,
+    propertySetupComplete: true,
     creditCheckComplete: true,
     rentalHistoryComplete: true,
     onboardingComplete: true,
@@ -123,7 +127,7 @@ function seedStore(): Store {
     { id: uuid(), email: "jane@demo.com", name: "Jane Doe", role: "tenant", tenantId: lowRiskTenantId },
     { id: uuid(), email: "marcus@demo.com", name: "Marcus Lee", role: "tenant", tenantId: highRiskTenantId },
     { id: uuid(), email: "owner@sunset.com", name: "Sunset Apartments", role: "landlord", landlordId },
-    { id: uuid(), email: "admin@flexrent.app", name: "FlexRent Admin", role: "admin" },
+    { id: uuid(), email: "admin@theunleashed.app", name: "The Unleashed Admin", role: "admin" },
   ];
 
   const lowRiskPayments = generatePaymentsForTenant(lowRiskTenant);
@@ -161,6 +165,7 @@ function seedStore(): Store {
       annualIncome: 78000,
       score: 742,
       riskTier: "low",
+      fee: 5,
       checkedAt: new Date().toISOString(),
     },
     {
@@ -171,6 +176,7 @@ function seedStore(): Store {
       annualIncome: 32000,
       score: 598,
       riskTier: "high",
+      fee: 5,
       checkedAt: new Date().toISOString(),
     },
   ];
@@ -224,12 +230,17 @@ function migrateStore(raw: Store): Store {
   for (const tenant of raw.tenants) {
     tenant.riskTier ??= tenant.enrolled ? "low" : null;
     tenant.creditScore ??= tenant.enrolled ? 700 : null;
+    tenant.propertyAddress ??= "";
+    tenant.propertySetupComplete ??= tenant.enrolled && Boolean(tenant.landlordId && tenant.unit);
     tenant.splitCount ??= tenant.riskTier === "high" ? 2 : 4;
     tenant.creditCheckComplete ??= tenant.enrolled;
     tenant.rentalHistoryComplete ??= tenant.enrolled;
     tenant.onboardingComplete ??= tenant.enrolled;
   }
   raw.creditChecks ??= [];
+  for (const check of raw.creditChecks) {
+    check.fee ??= 5;
+  }
   raw.rentalHistory ??= [];
   raw.utilityBills ??= [];
   for (const payment of raw.payments) {
@@ -319,44 +330,35 @@ export function createLandlordAccount(input: { name: string; email: string }) {
 
   store.landlords.push(landlord);
   store.users.push(user);
-  addActivity(`${name} created a landlord account on FlexRent.`, "landlord");
+  addActivity(`${name} created a landlord account on The Unleashed.`, "landlord");
   return { landlord, user };
 }
 
-export function createTenantAccount(input: {
-  name: string;
-  email: string;
-  landlordId: string;
-  unit: string;
-  monthlyRent: number;
-}) {
+export function createTenantAccount(input: { name: string; email: string }) {
   const email = input.email.trim().toLowerCase();
   const name = input.name.trim();
-  const unit = input.unit.trim();
-  if (!name || !email || !unit) throw new Error("Name, email, and unit are required");
+  if (!name || !email) throw new Error("Name and email are required");
   if (findUserByEmail(email)) throw new Error("Email already in use");
-  if (!findLandlord(input.landlordId)) throw new Error("Landlord not found");
-  if (!input.monthlyRent || input.monthlyRent < 100) {
-    throw new Error("Monthly rent must be at least $100");
-  }
 
   const tenantId = uuid();
   const tenant: Tenant = {
     id: tenantId,
     name,
     email,
-    landlordId: input.landlordId,
-    unit,
-    monthlyRent: input.monthlyRent,
+    landlordId: "",
+    unit: "",
+    propertyAddress: "",
+    monthlyRent: 0,
     rentDueDay: 1,
     bankLast4: randomLast4(),
     membershipFee: 14.99,
     billFeePercent: 1,
-    creditLimit: Math.max(2500, input.monthlyRent * 2),
+    creditLimit: 2500,
     enrolled: false,
     riskTier: null,
     creditScore: null,
     splitCount: 4,
+    propertySetupComplete: false,
     creditCheckComplete: false,
     rentalHistoryComplete: false,
     onboardingComplete: false,
@@ -372,8 +374,47 @@ export function createTenantAccount(input: {
 
   store.tenants.push(tenant);
   store.users.push(user);
-  addActivity(`${name} created a tenant account for unit ${unit}. Onboarding required.`, "tenant");
+  addActivity(`${name} created a tenant account. Property setup and verification required.`, "tenant");
   return { tenant, user };
+}
+
+export function submitTenantProperty(
+  tenantId: string,
+  input: {
+    landlordId: string;
+    unit: string;
+    propertyAddress: string;
+    monthlyRent: number;
+  },
+) {
+  const tenant = findTenant(tenantId);
+  if (!tenant) throw new Error("Tenant not found");
+  if (tenant.propertySetupComplete) throw new Error("Property already submitted");
+
+  const unit = input.unit.trim();
+  const propertyAddress = input.propertyAddress.trim();
+  if (!input.landlordId || !unit || !propertyAddress) {
+    throw new Error("Property, unit, and address are required");
+  }
+  if (!findLandlord(input.landlordId)) throw new Error("Landlord not found");
+  if (!input.monthlyRent || input.monthlyRent < 100) {
+    throw new Error("Monthly rent must be at least $100");
+  }
+
+  tenant.landlordId = input.landlordId;
+  tenant.unit = unit;
+  tenant.propertyAddress = propertyAddress;
+  tenant.monthlyRent = input.monthlyRent;
+  tenant.propertySetupComplete = true;
+  tenant.creditLimit = Math.max(2500, input.monthlyRent * 2);
+
+  const landlord = findLandlord(input.landlordId);
+  addActivity(
+    `${tenant.name} linked unit ${unit} at ${landlord?.name ?? "property"}.`,
+    "tenant",
+  );
+  persist();
+  return { tenant, landlord };
 }
 
 export function runCreditCheck(
@@ -387,6 +428,7 @@ export function runCreditCheck(
 ) {
   const tenant = findTenant(tenantId);
   if (!tenant) throw new Error("Tenant not found");
+  if (!tenant.propertySetupComplete) throw new Error("Complete property setup before credit check");
   if (tenant.creditCheckComplete) throw new Error("Credit check already completed");
 
   const score = mockCreditScore(input);
@@ -401,6 +443,7 @@ export function runCreditCheck(
     annualIncome: input.annualIncome,
     score,
     riskTier,
+    fee: SOFT_CREDIT_CHECK_FEE,
     checkedAt: new Date().toISOString(),
   };
 
@@ -414,7 +457,7 @@ export function runCreditCheck(
   tenant.creditLimit = Math.max(tenant.monthlyRent * splitCount, 2500);
 
   addActivity(
-    `${tenant.name} completed soft credit check — ${riskTier} risk (score ${score}), ${splitCount}-payment split.`,
+    `${tenant.name} paid $${SOFT_CREDIT_CHECK_FEE} soft credit check fee — ${riskTier} risk (score ${score}), ${splitCount}-payment split.`,
     "tenant",
   );
 
@@ -465,7 +508,12 @@ export function submitRentalHistory(
 }
 
 function maybeCompleteOnboarding(tenant: Tenant) {
-  if (!tenant.creditCheckComplete || !tenant.rentalHistoryComplete || tenant.onboardingComplete) {
+  if (
+    !tenant.propertySetupComplete ||
+    !tenant.creditCheckComplete ||
+    !tenant.rentalHistoryComplete ||
+    tenant.onboardingComplete
+  ) {
     return;
   }
 

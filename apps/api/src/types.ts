@@ -28,6 +28,7 @@ export interface Tenant {
   email: string;
   landlordId: string;
   unit: string;
+  propertyAddress: string;
   monthlyRent: number;
   rentDueDay: number;
   bankLast4: string;
@@ -38,6 +39,7 @@ export interface Tenant {
   riskTier: RiskTier | null;
   creditScore: number | null;
   splitCount: 2 | 4;
+  propertySetupComplete: boolean;
   creditCheckComplete: boolean;
   rentalHistoryComplete: boolean;
   onboardingComplete: boolean;
@@ -51,6 +53,7 @@ export interface CreditCheck {
   annualIncome: number;
   score: number;
   riskTier: RiskTier;
+  fee: number;
   checkedAt: string;
 }
 

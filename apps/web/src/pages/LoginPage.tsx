@@ -1,9 +1,10 @@
 import { Building2, Shield, User, UserPlus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
+import { BrandLogo } from "../components/BrandLogo";
 import { useAuth } from "../context/AuthContext";
-import { api, type UserRole } from "../lib/api";
-import { APP_NAME, APP_TAGLINE } from "../lib/brand";
+import { LANDLORD_FEE_PER_PAYMENT } from "../lib/brand";
+import { type UserRole } from "../lib/api";
 
 const demoAccounts: Array<{
   role: UserRole;
@@ -35,7 +36,7 @@ const demoAccounts: Array<{
   },
   {
     role: "admin",
-    email: "admin@flexrent.app",
+    email: "admin@theunleashed.app",
     title: "Admin",
     description: "Platform overview, activity feed, and demo reset.",
     icon: Shield,
@@ -48,31 +49,12 @@ export default function LoginPage() {
   const { user, login, registerLandlord, registerTenant } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState<string | null>(null);
-  const [signupTab, setSignupTab] = useState<SignupTab>("landlord");
+  const [signupTab, setSignupTab] = useState<SignupTab>("tenant");
   const [signupLoading, setSignupLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [landlords, setLandlords] = useState<Array<{ id: string; name: string }>>([]);
 
   const [landlordForm, setLandlordForm] = useState({ name: "", email: "" });
-  const [tenantForm, setTenantForm] = useState({
-    name: "",
-    email: "",
-    landlordId: "",
-    unit: "",
-    monthlyRent: "1500",
-  });
-
-  useEffect(() => {
-    api
-      .listLandlords()
-      .then(({ landlords: list }) => {
-        setLandlords(list);
-        if (list.length > 0) {
-          setTenantForm((f) => (f.landlordId ? f : { ...f, landlordId: list[0].id }));
-        }
-      })
-      .catch(() => setLandlords([]));
-  }, []);
+  const [tenantForm, setTenantForm] = useState({ name: "", email: "" });
 
   if (user) return <Navigate to="/app" replace />;
 
@@ -111,9 +93,6 @@ export default function LoginPage() {
       await registerTenant({
         name: tenantForm.name,
         email: tenantForm.email,
-        landlordId: tenantForm.landlordId,
-        unit: tenantForm.unit,
-        monthlyRent: Number(tenantForm.monthlyRent),
       });
       navigate("/app");
     } catch (err) {
@@ -126,9 +105,8 @@ export default function LoginPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-12">
       <div className="text-center">
-        <h1 className="font-serif-display text-3xl font-bold text-brand-100">{APP_NAME}</h1>
-        <p className="mt-2 text-neutral-400">{APP_TAGLINE}</p>
-        <p className="mt-1 text-sm text-neutral-500">
+        <BrandLogo size="lg" to="/" className="mx-auto" />
+        <p className="mt-6 text-sm text-neutral-500">
           Try demo accounts or create your own landlord or tenant profile.
         </p>
       </div>
@@ -167,24 +145,14 @@ export default function LoginPage() {
       <div className="mt-10 card-surface p-6">
         <div className="flex items-center gap-2">
           <UserPlus className="h-5 w-5 text-brand-400" />
-          <h2 className="font-serif-display text-lg font-semibold text-brand-100">Create your account</h2>
+          <h2 className="text-lg font-semibold text-brand-100">Create your account</h2>
         </div>
         <p className="mt-1 text-sm text-neutral-400">
-          Landlords get started instantly. Tenants complete credit check and rental history after signup.
+          Sign up as a tenant or landlord. Tenants enter property details and complete a soft credit
+          check after registering.
         </p>
 
         <div className="mt-4 flex gap-2">
-          <button
-            type="button"
-            onClick={() => setSignupTab("landlord")}
-            className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-              signupTab === "landlord"
-                ? "bg-brand-600 text-black"
-                : "border border-brand-600/20 text-neutral-400 hover:text-brand-200"
-            }`}
-          >
-            Landlord
-          </button>
           <button
             type="button"
             onClick={() => setSignupTab("tenant")}
@@ -196,9 +164,51 @@ export default function LoginPage() {
           >
             Tenant
           </button>
+          <button
+            type="button"
+            onClick={() => setSignupTab("landlord")}
+            className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+              signupTab === "landlord"
+                ? "bg-brand-600 text-black"
+                : "border border-brand-600/20 text-neutral-400 hover:text-brand-200"
+            }`}
+          >
+            Landlord
+          </button>
         </div>
 
-        {signupTab === "landlord" ? (
+        {signupTab === "tenant" ? (
+          <form onSubmit={handleTenantSignup} className="mt-6 space-y-4">
+            <p className="rounded-xl border border-brand-600/20 bg-brand-600/5 px-4 py-3 text-sm text-neutral-300">
+              After signing up, you&apos;ll enter your property details and pay a one-time $5 fee for
+              the soft credit check to get your personalized payment plan.
+            </p>
+            <label className="block text-sm text-neutral-400">
+              Your name
+              <input
+                required
+                value={tenantForm.name}
+                onChange={(e) => setTenantForm({ ...tenantForm, name: e.target.value })}
+                placeholder="Jane Doe"
+                className="input-dark"
+              />
+            </label>
+            <label className="block text-sm text-neutral-400">
+              Email
+              <input
+                required
+                type="email"
+                value={tenantForm.email}
+                onChange={(e) => setTenantForm({ ...tenantForm, email: e.target.value })}
+                placeholder="jane@example.com"
+                className="input-dark"
+              />
+            </label>
+            <button type="submit" disabled={signupLoading} className="btn-gold w-full">
+              {signupLoading ? "Creating account…" : "Sign up as tenant"}
+            </button>
+          </form>
+        ) : (
           <form onSubmit={handleLandlordSignup} className="mt-6 space-y-4">
             <label className="block text-sm text-neutral-400">
               Property / business name
@@ -221,87 +231,13 @@ export default function LoginPage() {
                 className="input-dark"
               />
             </label>
+            <p className="rounded-xl border border-brand-600/20 bg-brand-600/5 px-4 py-3 text-sm text-neutral-300">
+              <span className="font-medium text-brand-200">Landlord pricing:</span> ${LANDLORD_FEE_PER_PAYMENT}{" "}
+              per tenant payment — no signup fee, no monthly minimum.
+            </p>
             <button type="submit" disabled={signupLoading} className="btn-gold w-full">
               {signupLoading ? "Creating account…" : "Create landlord account"}
             </button>
-          </form>
-        ) : (
-          <form onSubmit={handleTenantSignup} className="mt-6 space-y-4">
-            <label className="block text-sm text-neutral-400">
-              Your name
-              <input
-                required
-                value={tenantForm.name}
-                onChange={(e) => setTenantForm({ ...tenantForm, name: e.target.value })}
-                placeholder="Jane Doe"
-                className="input-dark"
-              />
-            </label>
-            <label className="block text-sm text-neutral-400">
-              Email
-              <input
-                required
-                type="email"
-                value={tenantForm.email}
-                onChange={(e) => setTenantForm({ ...tenantForm, email: e.target.value })}
-                placeholder="jane@example.com"
-                className="input-dark"
-              />
-            </label>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block text-sm text-neutral-400">
-                Unit
-                <input
-                  required
-                  value={tenantForm.unit}
-                  onChange={(e) => setTenantForm({ ...tenantForm, unit: e.target.value })}
-                  placeholder="4B"
-                  className="input-dark"
-                />
-              </label>
-              <label className="block text-sm text-neutral-400">
-                Monthly rent ($)
-                <input
-                  required
-                  type="number"
-                  min={100}
-                  step={50}
-                  value={tenantForm.monthlyRent}
-                  onChange={(e) => setTenantForm({ ...tenantForm, monthlyRent: e.target.value })}
-                  className="input-dark"
-                />
-              </label>
-            </div>
-            <label className="block text-sm text-neutral-400">
-              Landlord / property
-              <select
-                required
-                value={tenantForm.landlordId}
-                onChange={(e) => setTenantForm({ ...tenantForm, landlordId: e.target.value })}
-                className="input-dark"
-              >
-                {landlords.length === 0 && (
-                  <option value="">Create a landlord account first</option>
-                )}
-                {landlords.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="submit"
-              disabled={signupLoading || landlords.length === 0}
-              className="btn-gold w-full"
-            >
-              {signupLoading ? "Creating account…" : "Create tenant account"}
-            </button>
-            {landlords.length === 0 && (
-              <p className="text-center text-xs text-neutral-500">
-                Switch to the Landlord tab and create a property first.
-              </p>
-            )}
           </form>
         )}
       </div>

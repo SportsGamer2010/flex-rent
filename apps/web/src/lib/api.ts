@@ -1,4 +1,4 @@
-const TOKEN_KEY = "flexrent_demo_token";
+const TOKEN_KEY = "unleashed_demo_token";
 
 export type UserRole = "tenant" | "landlord" | "admin";
 export type RiskTier = "low" | "medium" | "high";
@@ -56,13 +56,7 @@ export const api = {
       body: JSON.stringify({ name, email }),
     });
   },
-  registerTenant(input: {
-    name: string;
-    email: string;
-    landlordId: string;
-    unit: string;
-    monthlyRent: number;
-  }) {
+  registerTenant(input: { name: string; email: string }) {
     return request<{ token: string; user: User }>("/api/auth/register-tenant", {
       method: "POST",
       body: JSON.stringify(input),
@@ -76,6 +70,17 @@ export const api = {
   },
   tenantOnboarding() {
     return request<TenantOnboarding>("/api/tenant/onboarding");
+  },
+  submitTenantProperty(input: {
+    landlordId: string;
+    unit: string;
+    propertyAddress: string;
+    monthlyRent: number;
+  }) {
+    return request<{ tenant: TenantProfile; landlord: { id: string; name: string } | null }>(
+      "/api/tenant/property",
+      { method: "POST", body: JSON.stringify(input) },
+    );
   },
   submitCreditCheck(input: {
     fullLegalName: string;
@@ -129,6 +134,7 @@ export const api = {
 export interface TenantProfile {
   name: string;
   unit: string;
+  propertyAddress: string;
   monthlyRent: number;
   rentDueDay: number;
   bankLast4: string;
@@ -137,6 +143,7 @@ export interface TenantProfile {
   riskTier: RiskTier | null;
   creditScore: number | null;
   splitCount: 2 | 4;
+  propertySetupComplete: boolean;
   creditCheckComplete: boolean;
   rentalHistoryComplete: boolean;
   onboardingComplete: boolean;
@@ -145,6 +152,7 @@ export interface TenantProfile {
 export interface CreditCheckResult {
   score: number;
   riskTier: RiskTier;
+  fee: number;
   checkedAt: string;
 }
 
@@ -167,9 +175,13 @@ export interface RentalHistoryEntry extends RentalHistoryInput {
 
 export interface TenantOnboarding {
   tenant: TenantProfile;
+  landlord: { id: string; name: string } | null | undefined;
   creditCheck: CreditCheckResult | null;
   rentalHistory: RentalHistoryEntry | null;
+  landlords: Array<{ id: string; name: string }>;
+  creditCheckFee: number;
   steps: {
+    property: boolean;
     creditCheck: boolean;
     rentalHistory: boolean;
     complete: boolean;
@@ -198,7 +210,13 @@ export interface TenantDashboard {
     status: string;
     installment: number;
   }>;
-  fees: { membershipFee: number; billFee: number; total: number };
+  fees: {
+    creditCheckFee: number;
+    perPayment: number;
+    paymentCount: number;
+    monthlyPaymentFees: number;
+    total: number;
+  };
   creditCheck: CreditCheckResult | null;
   utilityBills: UtilityBill[];
   summary: {
@@ -213,6 +231,7 @@ export interface TenantDashboard {
 
 export interface LandlordDashboard {
   landlord: { name: string; payoutAccountLast4: string };
+  fees: { perPayment: number; totalPayments: number; monthlyTotal: number };
   tenants: Array<{
     name: string;
     unit: string;
@@ -222,6 +241,7 @@ export interface LandlordDashboard {
     splitCount: 2 | 4;
     creditScore: number | null;
     onboardingComplete: boolean;
+    fees: { perPayment: number; paymentCount: number; total: number };
   }>;
   payouts: Array<{
     tenantName: string;

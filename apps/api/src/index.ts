@@ -25,7 +25,7 @@ if (isProduction && fs.existsSync(WEB_DIST)) {
 }
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`FlexRent running on port ${PORT}`);
+  console.log(`The Unleashed running on port ${PORT}`);
   console.log(`Health check: /api/health`);
   if (isProduction && fs.existsSync(WEB_DIST)) {
     console.log("Serving web UI from", WEB_DIST);

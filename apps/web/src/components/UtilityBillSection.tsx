@@ -66,7 +66,7 @@ export function UtilityBillSection({
   return (
     <Card
       title="Utility bill service"
-      subtitle="Upload your utility bills and pay them through FlexRent — one less portal to manage"
+      subtitle="Upload your utility bills and pay them through The Unleashed — one less portal to manage"
     >
       {message && (
         <p className="mb-4 rounded-xl border border-brand-600/30 bg-brand-600/10 px-4 py-3 text-sm text-brand-100">

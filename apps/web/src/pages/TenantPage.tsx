@@ -60,7 +60,7 @@ export default function TenantPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="font-serif-display text-3xl font-bold text-brand-100">
+          <h1 className="text-3xl font-bold text-brand-100">
             Welcome back, {tenant.name}
           </h1>
           <p className="mt-1 text-neutral-400">
@@ -82,9 +82,17 @@ export default function TenantPage() {
         <StatCard
           label="Landlord status"
           value={summary.landlordPaidOnDueDate ? "Paid in full" : "Awaiting 1st payment"}
-          hint="FlexRent pays your landlord when you pay installment 1"
+          hint="The Unleashed pays your landlord when you pay installment 1"
         />
-        <StatCard label="Monthly fees" value={money(fees.total)} hint="Membership + bill service fee" />
+        <StatCard
+          label="Fees"
+          value={money(fees.monthlyPaymentFees)}
+          hint={
+            fees.creditCheckFee > 0
+              ? `${money(fees.perPayment)}/payment × ${fees.paymentCount} + ${money(fees.creditCheckFee)} credit check`
+              : `${money(fees.perPayment)} per payment × ${fees.paymentCount}`
+          }
+        />
       </div>
 
       <Card
@@ -104,7 +112,7 @@ export default function TenantPage() {
               <div>
                 <p className="font-medium text-brand-100">{payment.label}</p>
                 <p className="text-sm text-neutral-400">
-                  Due {formatDate(payment.dueDate)} · {money(payment.amount)}
+                  Due {formatDate(payment.dueDate)} · {money(payment.amount)} rent + {money(fees.perPayment)} fee
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -133,7 +141,7 @@ export default function TenantPage() {
             done={firstPaid}
             step="1"
             title="Pay 1st installment"
-            text="FlexRent uses this to pay your landlord in full on the due date."
+            text="The Unleashed uses this to pay your landlord in full on the due date."
           />
           <Step
             done={summary.landlordPaidOnDueDate}
@@ -145,7 +153,7 @@ export default function TenantPage() {
             done={payments.every((p) => p.status === "paid")}
             step="3"
             title={`Pay remaining ${summary.splitCount - 1} installment${summary.splitCount > 2 ? "s" : ""}`}
-            text={`Repay FlexRent from bank ••••${tenant.bankLast4} per your schedule.`}
+            text={`Repay The Unleashed from bank ••••${tenant.bankLast4} per your schedule.`}
           />
         </div>
       </Card>

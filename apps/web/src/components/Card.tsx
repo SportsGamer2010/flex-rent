@@ -13,9 +13,7 @@ export function Card({
     <section className={`card-surface p-5 ${className}`}>
       {(title || subtitle) && (
         <div className="mb-4">
-          {title && (
-            <h2 className="font-serif-display text-lg font-semibold text-brand-100">{title}</h2>
-          )}
+          {title && <h2 className="text-lg font-semibold text-brand-100">{title}</h2>}
           {subtitle && <p className="mt-1 text-sm text-neutral-400">{subtitle}</p>}
         </div>
       )}
